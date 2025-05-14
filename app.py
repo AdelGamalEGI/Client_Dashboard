@@ -27,9 +27,8 @@ risk_summary.columns = ['Risk Score', 'Count']
 fig_risk = px.bar(risk_summary, x='Risk Score', y='Count')
 
 # Tasks this month
-now = datetime.now()
-start_month = pd.Timestamp(now.replace(day=1))
-end_month = pd.Timestamp(start_month + pd.offsets.MonthEnd(1))
+start_month = pd.to_datetime(datetime.today().replace(day=1))
+end_month = pd.to_datetime(start_month + pd.offsets.MonthEnd(1))
 tasks_month = df_workstreams[
     (df_workstreams['Planned Start Date'] <= end_month) &
     (df_workstreams['Planned End Date'] >= start_month)
