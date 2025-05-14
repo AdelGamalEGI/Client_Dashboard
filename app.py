@@ -1,5 +1,6 @@
 import dash
 from dash import html, dcc
+import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
@@ -38,48 +39,37 @@ df_resources['Allocated/Used Hours'] = pd.to_numeric(df_resources['Allocated/Use
 active_team = df_resources[df_resources['Allocated/Used Hours'] > 0][['Person Name', 'Role', 'Allocated/Used Hours']]
 
 # Dash app setup
-app = dash.Dash(__name__)
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 server = app.server
 app.title = "Client Dashboard"
 
-app.layout = html.Div([
-    html.H1("Client-Facing Project Dashboard", style={'textAlign': 'center'}),
+app.layout = dbc.Container([
+    html.H1("Client-Facing Project Dashboard", className="my-4 text-center"),
 
-    html.Div([
-        html.Div([
-            html.H3("Workstream Progress"),
+    dbc.Row([
+        dbc.Col([
+            html.H4("Workstream Progress"),
             dcc.Graph(figure=fig_progress)
-        ], className="six columns"),
+        ], width=6),
 
-        html.Div([
-            html.H3("Risk Overview"),
+        dbc.Col([
+            html.H4("Risk Overview"),
             dcc.Graph(figure=fig_risk)
-        ], className="six columns")
-    ], className="row"),
+        ], width=6)
+    ], className="mb-4"),
 
-    html.Div([
-        html.Div([
-            html.H3("Tasks in Current Month"),
-            dcc.Markdown("#### Activities"),
-            html.Table([
-                html.Tr([html.Th(col) for col in tasks_month.columns])
-            ] + [
-                html.Tr([html.Td(tasks_month.iloc[i][col]) for col in tasks_month.columns])
-                for i in range(len(tasks_month))
-            ])
-        ], className="six columns"),
+    dbc.Row([
+        dbc.Col([
+            html.H4("Tasks in Current Month"),
+            dbc.Table.from_dataframe(tasks_month, striped=True, bordered=True, hover=True)
+        ], width=6),
 
-        html.Div([
-            html.H3("Active Team Members"),
-            html.Table([
-                html.Tr([html.Th(col) for col in active_team.columns])
-            ] + [
-                html.Tr([html.Td(active_team.iloc[i][col]) for col in active_team.columns])
-                for i in range(len(active_team))
-            ])
-        ], className="six columns")
-    ], className="row")
-])
+        dbc.Col([
+            html.H4("Active Team Members"),
+            dbc.Table.from_dataframe(active_team, striped=True, bordered=True, hover=True)
+        ], width=6)
+    ])
+], fluid=True)
 
 if __name__ == '__main__':
     app.run_server(debug=True)
