@@ -5,6 +5,7 @@ import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
+import os
 
 # Load Excel data
 file_path = 'Project_Management_Template_Updated.xlsx'
@@ -71,5 +72,7 @@ app.layout = dbc.Container([
     ])
 ], fluid=True)
 
+# Port binding for Render
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    port = int(os.environ.get('PORT', 8050))
+    app.run_server(host='0.0.0.0', port=port)
