@@ -18,11 +18,15 @@ df_resources = pd.read_excel(file_path, sheet_name='Resources')
 df_workstreams['Planned Start Date'] = pd.to_datetime(df_workstreams['Planned Start Date'], errors='coerce')
 df_workstreams['Planned End Date'] = pd.to_datetime(df_workstreams['Planned End Date'], errors='coerce')
 df_workstreams['Progress %'] = pd.to_numeric(df_workstreams['Progress %'], errors='coerce')
-df_workstreams['Planned %'] = pd.to_numeric(df_workstreams['Planned %'], errors='coerce')
 df_resources['Allocated/Used Hours'] = pd.to_numeric(df_resources['Allocated/Used Hours'], errors='coerce')
 
+# Calculate Planned % based on time elapsed
+today = pd.Timestamp(datetime.today().date())
+duration = (df_workstreams['Planned End Date'] - df_workstreams['Planned Start Date']).dt.days
+elapsed = (today - df_workstreams['Planned Start Date']).dt.days
+df_workstreams['Planned %'] = ((elapsed / duration) * 100).clip(lower=0, upper=100).fillna(0)
+
 # Timeframe
-now = datetime.now()
 start_month = pd.to_datetime(datetime.today().replace(day=1))
 end_month = pd.to_datetime(start_month + pd.offsets.MonthEnd(1))
 
@@ -51,7 +55,7 @@ def get_color(delta):
     return 'red'
 
 ws_chart = go.Figure()
-for _, row in df_workstreams.groupby('Work-stream').mean().reset_index().iterrows():
+for _, row in df_workstreams.groupby('Work-stream').mean(numeric_only=True).reset_index().iterrows():
     delta = abs(row['Planned %'] - row['Progress %'])
     color = get_color(delta)
     ws_chart.add_trace(go.Bar(name='Planned', x=[row['Planned %']], y=[row['Work-stream']], orientation='h', marker_color='blue'))
