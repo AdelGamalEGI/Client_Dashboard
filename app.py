@@ -1,43 +1,17 @@
-
 import dash
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly.graph_objects as go
 import os
-
-import re
-
-def clean_text(s):
-    s = re.sub(r'\s+', ' ', s)  # replace multiple whitespace with single space
-    s = s.replace('\xa0', ' ')   # replace non-breaking spaces
-    return s.strip().lower()
-
 from datetime import datetime
 
-
-import gspread
-from gspread_dataframe import get_as_dataframe, set_with_dataframe
-from oauth2client.service_account import ServiceAccountCredentials
-
-# Google Sheets authentication
-scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
-client = gspread.authorize(creds)
-
-# Open the spreadsheet and read sheets into dataframes
-spreadsheet = client.open("Project_Planning_Workbook")  # Google Sheet name
-ws_sheet = spreadsheet.worksheet("Workstreams")
-risks_sheet = spreadsheet.worksheet("Risk_Register")
-issues_sheet = spreadsheet.worksheet("Issue_Tracker")
-refs_sheet = spreadsheet.worksheet("References")
-
-# Convert to DataFrames (drop rows that are fully empty)
-df_workstreams = get_as_dataframe(ws_sheet).dropna(how='all')
-df_risks = get_as_dataframe(risks_sheet).dropna(how='all')
-df_issues = get_as_dataframe(issues_sheet).dropna(how='all')
-df_team = get_as_dataframe(refs_sheet).dropna(how='all')
-
+# Load updated workbook
+file_path = 'Project_ Planning_Workbook.xlsx'
+df_workstreams = pd.read_excel(file_path, sheet_name='Workstreams')
+df_risks = pd.read_excel(file_path, sheet_name='Risk_Register')
+df_issues = pd.read_excel(file_path, sheet_name='Issue_Tracker')
+df_team = pd.read_excel(file_path, sheet_name='References')
 
 # Preprocess dates and percentages
 df_workstreams['Start Date'] = pd.to_datetime(df_workstreams['Start Date'], errors='coerce')
@@ -83,9 +57,9 @@ open_risks = df_risks[df_risks['Status'].astype(str).str.lower().str.strip() == 
 num_open_risks = open_risks.shape[0]
 
 # Risk color
-if 'High' in open_risks['Risk Score'].values:
+if 'High' in open_risks['Risk Score'].astype(str).values:
     risk_color = 'danger'
-elif 'Medium' in open_risks['Risk Score'].values:
+elif 'Medium' in open_risks['Risk Score'].astype(str).values:
     risk_color = 'warning'
 else:
     risk_color = 'warning' if num_open_risks > 0 else 'secondary'
@@ -106,33 +80,17 @@ for _, row in ws_summary.iterrows():
 ws_chart.update_layout(barmode='overlay', title='Workstream Progress', height=300)
 
 # Section 3: Tasks This Month Table
-task_table = dbc.Table.from_dataframe(tasks_this_month[['Task Name', 'Actual % Complete']], striped=True, bordered=True, hover=True)
+task_table = dbc.Table.from_dataframe(tasks_this_month[['Activity Name', 'Actual % Complete']], striped=True, bordered=True, hover=True)
 
 # Section 4: Active Team Members (from "Assigned To")
+if 'Assigned To' in df_workstreams.columns:
+    assigned_people = df_workstreams['Assigned To'].dropna().astype(str).str.split(',').explode().str.strip().str.lower()
+    active_names = assigned_people.unique()
+else:
+    active_names = []
 
-assigned_people = (
-    tasks_this_month['Assigned To']
-    .dropna()
-    .astype(str)
-    .apply(clean_text)
-    .str.split(',')
-    .explode()
-    .apply(clean_text)
-)
-
-df_team['Person Name Lower'] = df_team['Person Name'].astype(str).apply(clean_text)
-
+df_team['Person Name Lower'] = df_team['Person Name'].astype(str).str.strip().str.lower()
 active_members = df_team[df_team['Person Name Lower'].isin(active_names)]
-
-print("\n--- TEAM DEBUG ---")
-for i, row in tasks_this_month.iterrows():
-    print(f"Task: {row.get('Task Name', 'N/A')}, Assigned To: {row.get('Assigned To', '')}")
-
-print("Parsed Assigned People:", assigned_people.tolist())
-print("Team Reference Names:", df_team['Person Name'].tolist())
-print("Matched Active Members:", active_members['Person Name'].tolist())
-print("--- END DEBUG ---\n")
-
 
 # Photo Mapping (optional customization)
 photo_mapping = {
@@ -202,6 +160,5 @@ app.layout = dbc.Container([
 ], fluid=True)
 
 if __name__ == '__main__':
-    from waitress import serve
     port = int(os.environ.get('PORT', 8050))
-    serve(app.server, host='0.0.0.0', port=port)
+    app.run_server(host='0.0.0.0', port=port)
