@@ -83,7 +83,7 @@ ws_chart.update_layout(barmode='overlay', title='Workstream Progress', height=30
 task_table = dbc.Table.from_dataframe(tasks_this_month[['Task Name', 'Actual % Complete']], striped=True, bordered=True, hover=True)
 
 # Section 4: Active Team Members (from "Assigned To")
-assigned_people = tasks_this_month['Assigned To'].dropna().str.split(',').explode().str.strip().str.lower()
+assigned_people = tasks_this_month['Assigned To'].dropna().astype(str).str.split(',').explode().str.strip().str.lower()
 active_names = assigned_people.unique()
 
 df_team = pd.read_excel(file_path, sheet_name='References')
