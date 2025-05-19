@@ -1,3 +1,4 @@
+
 import dash
 from dash import html, dcc
 import dash_bootstrap_components as dbc
@@ -6,12 +7,29 @@ import plotly.graph_objects as go
 import os
 from datetime import datetime
 
-# Load updated workbook
-file_path = 'Project_ Planning_Workbook.xlsx'
-df_workstreams = pd.read_excel(file_path, sheet_name='Workstreams')
-df_risks = pd.read_excel(file_path, sheet_name='Risk_Register')
-df_issues = pd.read_excel(file_path, sheet_name='Issue_Tracker')
-df_team = pd.read_excel(file_path, sheet_name='References')
+
+import gspread
+from gspread_dataframe import get_as_dataframe, set_with_dataframe
+from oauth2client.service_account import ServiceAccountCredentials
+
+# Google Sheets authentication
+scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
+client = gspread.authorize(creds)
+
+# Open the spreadsheet and read sheets into dataframes
+spreadsheet = client.open("Project_Planning_Workbook")  # Google Sheet name
+ws_sheet = spreadsheet.worksheet("Workstreams")
+risks_sheet = spreadsheet.worksheet("Risk_Register")
+issues_sheet = spreadsheet.worksheet("Issue_Tracker")
+refs_sheet = spreadsheet.worksheet("References")
+
+# Convert to DataFrames (drop rows that are fully empty)
+df_workstreams = get_as_dataframe(ws_sheet).dropna(how='all')
+df_risks = get_as_dataframe(risks_sheet).dropna(how='all')
+df_issues = get_as_dataframe(issues_sheet).dropna(how='all')
+df_team = get_as_dataframe(refs_sheet).dropna(how='all')
+
 
 # Preprocess dates and percentages
 df_workstreams['Start Date'] = pd.to_datetime(df_workstreams['Start Date'], errors='coerce')
@@ -57,9 +75,9 @@ open_risks = df_risks[df_risks['Status'].astype(str).str.lower().str.strip() == 
 num_open_risks = open_risks.shape[0]
 
 # Risk color
-if 'High' in open_risks['Risk Score'].astype(str).values:
+if 'High' in open_risks['Risk Score'].values:
     risk_color = 'danger'
-elif 'Medium' in open_risks['Risk Score'].astype(str).values:
+elif 'Medium' in open_risks['Risk Score'].values:
     risk_color = 'warning'
 else:
     risk_color = 'warning' if num_open_risks > 0 else 'secondary'
@@ -83,12 +101,10 @@ ws_chart.update_layout(barmode='overlay', title='Workstream Progress', height=30
 task_table = dbc.Table.from_dataframe(tasks_this_month[['Task Name', 'Actual % Complete']], striped=True, bordered=True, hover=True)
 
 # Section 4: Active Team Members (from "Assigned To")
-if 'Assigned To' in df_workstreams.columns:
-    assigned_people = df_workstreams['Assigned To'].dropna().astype(str).str.split(',').explode().str.strip().str.lower()
-    active_names = assigned_people.unique()
-else:
-    active_names = []
+assigned_people = tasks_this_month['Assigned To'].dropna().astype(str).str.split(',').explode().str.strip().str.lower()
+active_names = assigned_people.unique()
 
+# Removed Excel read; now using Google Sheets for df_team
 df_team['Person Name Lower'] = df_team['Person Name'].astype(str).str.strip().str.lower()
 active_members = df_team[df_team['Person Name Lower'].isin(active_names)]
 
