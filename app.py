@@ -6,109 +6,16 @@ import pandas as pd
 import plotly.graph_objects as go
 import os
 from datetime import datetime
-
-
 import gspread
-from gspread_dataframe import get_as_dataframe, set_with_dataframe
+from gspread_dataframe import get_as_dataframe
 from oauth2client.service_account import ServiceAccountCredentials
 
-# Google Sheets authentication
+# Google Sheets auth
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
 client = gspread.authorize(creds)
 
-# Open the spreadsheet and read sheets into dataframes
-spreadsheet = client.open("Project_Planning_Workbook")  # Google Sheet name
-ws_sheet = spreadsheet.worksheet("Workstreams")
-risks_sheet = spreadsheet.worksheet("Risk_Register")
-issues_sheet = spreadsheet.worksheet("Issue_Tracker")
-refs_sheet = spreadsheet.worksheet("References")
-
-# Convert to DataFrames (drop rows that are fully empty)
-df_workstreams = get_as_dataframe(ws_sheet).dropna(how='all')
-df_risks = get_as_dataframe(risks_sheet).dropna(how='all')
-df_issues = get_as_dataframe(issues_sheet).dropna(how='all')
-df_team = get_as_dataframe(refs_sheet).dropna(how='all')
-
-
-# Preprocess dates and percentages
-df_workstreams['Start Date'] = pd.to_datetime(df_workstreams['Start Date'], errors='coerce')
-df_workstreams['End Date'] = pd.to_datetime(df_workstreams['End Date'], errors='coerce')
-df_workstreams['Actual % Complete'] = pd.to_numeric(df_workstreams['Actual % Complete'], errors='coerce')
-df_workstreams['Duration (Effort Days)'] = pd.to_numeric(df_workstreams['Duration (Effort Days)'], errors='coerce').fillna(0)
-
-# Define current month range
-today = pd.Timestamp.today()
-start_month = today.replace(day=1)
-end_month = start_month + pd.offsets.MonthEnd(1)
-
-# Weighted Planned % per workstream
-def compute_planned_percent(row):
-    if pd.isna(row['Start Date']) or pd.isna(row['End Date']):
-        return 0
-    duration = (row['End Date'] - row['Start Date']).days
-    elapsed = (today - row['Start Date']).days
-    return max(0, min(1, elapsed / duration)) * row['Duration (Effort Days)'] if duration > 0 else 0
-
-df_workstreams['Planned Weighted'] = df_workstreams.apply(compute_planned_percent, axis=1)
-df_workstreams['Actual Weighted'] = df_workstreams['Actual % Complete'] * df_workstreams['Duration (Effort Days)']
-
-ws_summary = df_workstreams.groupby('Workstream').agg({
-    'Duration (Effort Days)': 'sum',
-    'Planned Weighted': 'sum',
-    'Actual Weighted': 'sum'
-}).reset_index()
-
-ws_summary['Planned %'] = (ws_summary['Planned Weighted'] / ws_summary['Duration (Effort Days)']).fillna(0) * 100
-ws_summary['Actual %'] = (ws_summary['Actual Weighted'] / ws_summary['Duration (Effort Days)']).fillna(0)
-
-# Section 1: KPI Summary
-tasks_this_month = df_workstreams[
-    (df_workstreams['Start Date'] <= end_month) & (df_workstreams['End Date'] >= start_month)
-]
-num_tasks = tasks_this_month.shape[0]
-
-open_issues = df_issues[df_issues['Status'].astype(str).str.lower().str.strip() == 'open']
-num_open_issues = open_issues.shape[0]
-
-open_risks = df_risks[df_risks['Status'].astype(str).str.lower().str.strip() == 'open']
-num_open_risks = open_risks.shape[0]
-
-# Risk color
-if 'High' in open_risks['Risk Score'].values:
-    risk_color = 'danger'
-elif 'Medium' in open_risks['Risk Score'].values:
-    risk_color = 'warning'
-else:
-    risk_color = 'warning' if num_open_risks > 0 else 'secondary'
-
-# Workstream Progress Chart
-def progress_color(delta):
-    if delta <= 15:
-        return 'green'
-    elif delta <= 30:
-        return 'orange'
-    return 'red'
-
-ws_chart = go.Figure()
-for _, row in ws_summary.iterrows():
-    delta = abs(row['Planned %'] - row['Actual %'])
-    ws_chart.add_trace(go.Bar(name='Planned', x=[row['Planned %']], y=[row['Workstream']], orientation='h', marker_color='blue'))
-    ws_chart.add_trace(go.Bar(name='Actual', x=[row['Actual %']], y=[row['Workstream']], orientation='h', marker_color=progress_color(delta)))
-ws_chart.update_layout(barmode='overlay', title='Workstream Progress', height=300)
-
-# Section 3: Tasks This Month Table
-task_table = dbc.Table(id='tasks-table')
-
-# Section 4: Active Team Members (from "Assigned To")
-assigned_people = tasks_this_month['Assigned To'].dropna().astype(str).str.split(',').explode().str.strip().str.lower()
-active_names = assigned_people.unique()
-
-# Removed Excel read; now using Google Sheets for df_team
-df_team['Person Name Lower'] = df_team['Person Name'].astype(str).str.strip().str.lower()
-active_members = df_team[df_team['Person Name Lower'].isin(active_names)]
-
-# Photo Mapping (optional customization)
+# Photo map
 photo_mapping = {
     "lavjit singh": "lavjit.jpg",
     "adel gamal": "adel.jpg",
@@ -121,6 +28,7 @@ photo_mapping = {
     "seyed khali": "seyed.jpg"
 }
 
+# Card for team member
 def member_card(name, role):
     key = name.strip().lower()
     img_file = photo_mapping.get(key)
@@ -139,61 +47,45 @@ def member_card(name, role):
         className='mb-2 p-2 shadow-sm'
     )
 
-member_cards = [member_card(row['Person Name'], row['Role']) for _, row in active_members.iterrows()]
-
-# KPI Card
-kpi_card = dbc.Card([
-    dbc.CardHeader("KPI Summary"),
-    dbc.CardBody([
-        dbc.Row([
-            dbc.Col(html.Div([html.H2(f"{num_tasks}", className="text-primary text-center mb-0"),
-                              html.P("Tasks This Month", className="text-muted text-center")])),
-            dbc.Col(html.Div([html.H2([dbc.Badge(f"{num_open_risks}", color=risk_color, className="px-3 py-2", pill=True)],
-                                      className="text-center mb-0"),
-                              html.P("Open Risks", className="text-muted text-center")])),
-            dbc.Col(html.Div([html.H2(f"{num_open_issues}", className="text-primary text-center mb-0"),
-                              html.P("Open Issues", className="text-muted text-center")])),
-        ], justify="center")
-    ])
-], className="p-3 shadow-sm")
-
-# App Layout
+# Build Dash app
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 server = app.server
 
 app.layout = dbc.Container([
-    dcc.Interval(id='interval-refresh', interval=60*1000, n_intervals=0),
     html.H2('Client Dashboard', className='text-center my-4'),
 
+    dcc.Interval(id='interval-refresh', interval=60*1000, n_intervals=0),
+
     dbc.Row([
-        dbc.Col([kpi_card], width=6),
-        dbc.Col(dbc.Card([dbc.CardHeader('Workstream Progress'), dbc.CardBody([dcc.Graph(id='workstream-progress-chart', figure=ws_chart)])], className="shadow-sm"), width=6),
+        dbc.Col(dbc.Card(id='kpi-summary', className='shadow-sm'), width=6),
+        dbc.Col(dbc.Card([dbc.CardHeader('Workstream Progress'), dbc.CardBody([dcc.Graph(id='workstream-progress-chart')])], className="shadow-sm"), width=6),
     ], className='mb-4'),
 
     dbc.Row([
-        dbc.Col(dbc.Card([dbc.CardHeader('Tasks This Month'), dbc.CardBody([task_table])], className="shadow-sm"), width=6),
-        dbc.Col(dbc.Card([dbc.CardHeader('Active Team Members'), dbc.CardBody(member_cards)], className="shadow-sm"), width=6),
+        dbc.Col(dbc.Card([dbc.CardHeader('Tasks This Month'), dbc.CardBody([dbc.Table(id='tasks-table')])], className="shadow-sm"), width=6),
+        dbc.Col(dbc.Card([dbc.CardHeader('Active Team Members'), dbc.CardBody(id='team-members')], className="shadow-sm"), width=6),
     ])
 ], fluid=True)
 
-
-def load_data():
-    spreadsheet = client.open("Project_Planning_Workbook")
-    ws_sheet = spreadsheet.worksheet("Workstreams")
-    df = get_as_dataframe(ws_sheet).dropna(how='all')
-    df['Start Date'] = pd.to_datetime(df['Start Date'], errors='coerce')
-    df['End Date'] = pd.to_datetime(df['End Date'], errors='coerce')
-    df['Actual % Complete'] = pd.to_numeric(df['Actual % Complete'], errors='coerce')
-    df['Duration (Effort Days)'] = pd.to_numeric(df['Duration (Effort Days)'], errors='coerce').fillna(0)
-    return df
-
 @app.callback(
+    Output('kpi-summary', 'children'),
     Output('workstream-progress-chart', 'figure'),
     Output('tasks-table', 'children'),
+    Output('team-members', 'children'),
     Input('interval-refresh', 'n_intervals')
 )
-def refresh_data(n):
-    df = load_data()
+def refresh_dashboard(n):
+    # Load data
+    spreadsheet = client.open("Project_Planning_Workbook")
+    df_workstreams = get_as_dataframe(spreadsheet.worksheet("Workstreams")).dropna(how='all')
+    df_issues = get_as_dataframe(spreadsheet.worksheet("Issue_Tracker")).dropna(how='all')
+    df_risks = get_as_dataframe(spreadsheet.worksheet("Risk_Register")).dropna(how='all')
+    df_team = get_as_dataframe(spreadsheet.worksheet("References")).dropna(how='all')
+
+    df_workstreams['Start Date'] = pd.to_datetime(df_workstreams['Start Date'], errors='coerce')
+    df_workstreams['End Date'] = pd.to_datetime(df_workstreams['End Date'], errors='coerce')
+    df_workstreams['Actual % Complete'] = pd.to_numeric(df_workstreams['Actual % Complete'], errors='coerce')
+    df_workstreams['Duration (Effort Days)'] = pd.to_numeric(df_workstreams['Duration (Effort Days)'], errors='coerce').fillna(0)
 
     today = pd.Timestamp.today()
     start_month = today.replace(day=1)
@@ -206,31 +98,65 @@ def refresh_data(n):
         elapsed = (today - row['Start Date']).days
         return max(0, min(1, elapsed / duration)) * row['Duration (Effort Days)'] if duration > 0 else 0
 
-    df['Planned Weighted'] = df.apply(compute_planned_percent, axis=1)
-    df['Actual Weighted'] = df['Actual % Complete'] * df['Duration (Effort Days)']
+    df_workstreams['Planned Weighted'] = df_workstreams.apply(compute_planned_percent, axis=1)
+    df_workstreams['Actual Weighted'] = df_workstreams['Actual % Complete'] * df_workstreams['Duration (Effort Days)']
 
-    ws_summary = df.groupby('Workstream').agg({
+    ws_summary = df_workstreams.groupby('Workstream').agg({
         'Duration (Effort Days)': 'sum',
         'Planned Weighted': 'sum',
         'Actual Weighted': 'sum'
     }).reset_index()
-
     ws_summary['Planned %'] = (ws_summary['Planned Weighted'] / ws_summary['Duration (Effort Days)']).fillna(0) * 100
     ws_summary['Actual %'] = (ws_summary['Actual Weighted'] / ws_summary['Duration (Effort Days)']).fillna(0)
 
+    # KPI Summary
+    tasks_this_month = df_workstreams[(df_workstreams['Start Date'] <= end_month) & (df_workstreams['End Date'] >= start_month)]
+    num_tasks = tasks_this_month.shape[0]
+    num_open_issues = df_issues[df_issues['Status'].astype(str).str.lower().str.strip() == 'open'].shape[0]
+    open_risks = df_risks[df_risks['Status'].astype(str).str.lower().str.strip() == 'open']
+    num_open_risks = open_risks.shape[0]
+
+    if 'High' in open_risks['Risk Score'].values:
+        risk_color = 'danger'
+    elif 'Medium' in open_risks['Risk Score'].values:
+        risk_color = 'warning'
+    else:
+        risk_color = 'warning' if num_open_risks > 0 else 'secondary'
+
+    kpi_card = [
+        dbc.CardHeader("KPI Summary"),
+        dbc.CardBody([
+            dbc.Row([
+                dbc.Col(html.Div([html.H2(f"{num_tasks}", className="text-primary text-center mb-0"),
+                                  html.P("Tasks This Month", className="text-muted text-center")])),
+                dbc.Col(html.Div([html.H2([dbc.Badge(f"{num_open_risks}", color=risk_color, className="px-3 py-2", pill=True)],
+                                          className="text-center mb-0"),
+                                  html.P("Open Risks", className="text-muted text-center")])),
+                dbc.Col(html.Div([html.H2(f"{num_open_issues}", className="text-primary text-center mb-0"),
+                                  html.P("Open Issues", className="text-muted text-center")])),
+            ], justify="center")
+        ])
+    ]
+
+    # Chart
     fig = go.Figure()
     for _, row in ws_summary.iterrows():
         delta = abs(row['Planned %'] - row['Actual %'])
         color = 'green' if delta <= 15 else 'orange' if delta <= 30 else 'red'
         fig.add_trace(go.Bar(name='Planned', x=[row['Planned %']], y=[row['Workstream']], orientation='h', marker_color='blue'))
         fig.add_trace(go.Bar(name='Actual', x=[row['Actual %']], y=[row['Workstream']], orientation='h', marker_color=color))
-    fig.update_layout(barmode='overlay', title='Workstream Progress (Auto-Refreshed)', height=300)
+    fig.update_layout(barmode='overlay', title='Workstream Progress', height=300)
 
-    tasks_this_month = df[(df['Start Date'] <= end_month) & (df['End Date'] >= start_month)]
+    # Table
     table = dbc.Table.from_dataframe(tasks_this_month[['Task Name', 'Actual % Complete']], striped=True, bordered=True, hover=True)
 
-    return fig, table
+    # Team members
+    assigned_people = tasks_this_month['Assigned To'].dropna().astype(str).str.split(',').explode().str.strip().str.lower()
+    df_team['Person Name Lower'] = df_team['Person Name'].astype(str).str.strip().str.lower()
+    active_members = df_team[df_team['Person Name Lower'].isin(assigned_people.unique())]
+    team_cards = [member_card(row['Person Name'], row['Role']) for _, row in active_members.iterrows()]
 
+    return kpi_card, fig, table, team_cards
 
 if __name__ == '__main__':
     from waitress import serve
