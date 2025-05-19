@@ -50,10 +50,10 @@ tasks_this_month = df_workstreams[
 ]
 num_tasks = tasks_this_month.shape[0]
 
-open_issues = df_issues[df_issues['Status'].str.lower().str.strip() == 'open']
+open_issues = df_issues[df_issues['Status'].astype(str).str.lower().str.strip() == 'open']
 num_open_issues = open_issues.shape[0]
 
-open_risks = df_risks[df_risks['Status'].fillna('').str.lower().str.strip() == 'open']
+open_risks = df_risks[df_risks['Status'].astype(str).str.lower().str.strip() == 'open']
 num_open_risks = open_risks.shape[0]
 
 # Risk color
@@ -87,7 +87,7 @@ assigned_people = tasks_this_month['Assigned To'].dropna().str.split(',').explod
 active_names = assigned_people.unique()
 
 df_team = pd.read_excel(file_path, sheet_name='References')
-df_team['Person Name Lower'] = df_team['Person Name'].str.strip().str.lower()
+df_team['Person Name Lower'] = df_team['Person Name'].astype(str).str.strip().str.lower()
 active_members = df_team[df_team['Person Name Lower'].isin(active_names)]
 
 # Photo Mapping (optional customization)
