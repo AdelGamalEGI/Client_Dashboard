@@ -98,7 +98,7 @@ for _, row in ws_summary.iterrows():
 ws_chart.update_layout(barmode='overlay', title='Workstream Progress', height=300)
 
 # Section 3: Tasks This Month Table
-task_table = dbc.Table.from_dataframe(tasks_this_month[['Task Name', 'Actual % Complete']], striped=True, bordered=True, hover=True)
+task_table = dbc.Table(id='tasks-table')
 
 # Section 4: Active Team Members (from "Assigned To")
 assigned_people = tasks_this_month['Assigned To'].dropna().astype(str).str.split(',').explode().str.strip().str.lower()
@@ -162,11 +162,12 @@ app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 server = app.server
 
 app.layout = dbc.Container([
+    dcc.Interval(id='interval-refresh', interval=60*1000, n_intervals=0),
     html.H2('Client Dashboard', className='text-center my-4'),
 
     dbc.Row([
         dbc.Col([kpi_card], width=6),
-        dbc.Col(dbc.Card([dbc.CardHeader('Workstream Progress'), dbc.CardBody([dcc.Graph(figure=ws_chart)])], className="shadow-sm"), width=6),
+        dbc.Col(dbc.Card([dbc.CardHeader('Workstream Progress'), dbc.CardBody([dcc.Graph(id='workstream-progress-chart', figure=ws_chart)])], className="shadow-sm"), width=6),
     ], className='mb-4'),
 
     dbc.Row([
@@ -174,6 +175,62 @@ app.layout = dbc.Container([
         dbc.Col(dbc.Card([dbc.CardHeader('Active Team Members'), dbc.CardBody(member_cards)], className="shadow-sm"), width=6),
     ])
 ], fluid=True)
+
+
+def load_data():
+    spreadsheet = client.open("Project_Planning_Workbook")
+    ws_sheet = spreadsheet.worksheet("Workstreams")
+    df = get_as_dataframe(ws_sheet).dropna(how='all')
+    df['Start Date'] = pd.to_datetime(df['Start Date'], errors='coerce')
+    df['End Date'] = pd.to_datetime(df['End Date'], errors='coerce')
+    df['Actual % Complete'] = pd.to_numeric(df['Actual % Complete'], errors='coerce')
+    df['Duration (Effort Days)'] = pd.to_numeric(df['Duration (Effort Days)'], errors='coerce').fillna(0)
+    return df
+
+@app.callback(
+    Output('workstream-progress-chart', 'figure'),
+    Output('tasks-table', 'children'),
+    Input('interval-refresh', 'n_intervals')
+)
+def refresh_data(n):
+    df = load_data()
+
+    today = pd.Timestamp.today()
+    start_month = today.replace(day=1)
+    end_month = start_month + pd.offsets.MonthEnd(1)
+
+    def compute_planned_percent(row):
+        if pd.isna(row['Start Date']) or pd.isna(row['End Date']):
+            return 0
+        duration = (row['End Date'] - row['Start Date']).days
+        elapsed = (today - row['Start Date']).days
+        return max(0, min(1, elapsed / duration)) * row['Duration (Effort Days)'] if duration > 0 else 0
+
+    df['Planned Weighted'] = df.apply(compute_planned_percent, axis=1)
+    df['Actual Weighted'] = df['Actual % Complete'] * df['Duration (Effort Days)']
+
+    ws_summary = df.groupby('Workstream').agg({
+        'Duration (Effort Days)': 'sum',
+        'Planned Weighted': 'sum',
+        'Actual Weighted': 'sum'
+    }).reset_index()
+
+    ws_summary['Planned %'] = (ws_summary['Planned Weighted'] / ws_summary['Duration (Effort Days)']).fillna(0) * 100
+    ws_summary['Actual %'] = (ws_summary['Actual Weighted'] / ws_summary['Duration (Effort Days)']).fillna(0)
+
+    fig = go.Figure()
+    for _, row in ws_summary.iterrows():
+        delta = abs(row['Planned %'] - row['Actual %'])
+        color = 'green' if delta <= 15 else 'orange' if delta <= 30 else 'red'
+        fig.add_trace(go.Bar(name='Planned', x=[row['Planned %']], y=[row['Workstream']], orientation='h', marker_color='blue'))
+        fig.add_trace(go.Bar(name='Actual', x=[row['Actual %']], y=[row['Workstream']], orientation='h', marker_color=color))
+    fig.update_layout(barmode='overlay', title='Workstream Progress (Auto-Refreshed)', height=300)
+
+    tasks_this_month = df[(df['Start Date'] <= end_month) & (df['End Date'] >= start_month)]
+    table = dbc.Table.from_dataframe(tasks_this_month[['Task Name', 'Actual % Complete']], striped=True, bordered=True, hover=True)
+
+    return fig, table
+
 
 if __name__ == '__main__':
     from waitress import serve
