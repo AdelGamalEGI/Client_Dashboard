@@ -5,6 +5,14 @@ import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly.graph_objects as go
 import os
+
+import re
+
+def clean_text(s):
+    s = re.sub(r'\s+', ' ', s)  # replace multiple whitespace with single space
+    s = s.replace('\xa0', ' ')   # replace non-breaking spaces
+    return s.strip().lower()
+
 from datetime import datetime
 
 
@@ -101,12 +109,30 @@ ws_chart.update_layout(barmode='overlay', title='Workstream Progress', height=30
 task_table = dbc.Table.from_dataframe(tasks_this_month[['Task Name', 'Actual % Complete']], striped=True, bordered=True, hover=True)
 
 # Section 4: Active Team Members (from "Assigned To")
-assigned_people = tasks_this_month['Assigned To'].dropna().astype(str).str.split(',').explode().str.strip().str.lower()
-active_names = assigned_people.unique()
 
-# Removed Excel read; now using Google Sheets for df_team
-df_team['Person Name Lower'] = df_team['Person Name'].astype(str).str.strip().str.lower()
+assigned_people = (
+    tasks_this_month['Assigned To']
+    .dropna()
+    .astype(str)
+    .apply(clean_text)
+    .str.split(',')
+    .explode()
+    .apply(clean_text)
+)
+
+df_team['Person Name Lower'] = df_team['Person Name'].astype(str).apply(clean_text)
+
 active_members = df_team[df_team['Person Name Lower'].isin(active_names)]
+
+print("\n--- TEAM DEBUG ---")
+for i, row in tasks_this_month.iterrows():
+    print(f"Task: {row.get('Task Name', 'N/A')}, Assigned To: {row.get('Assigned To', '')}")
+
+print("Parsed Assigned People:", assigned_people.tolist())
+print("Team Reference Names:", df_team['Person Name'].tolist())
+print("Matched Active Members:", active_members['Person Name'].tolist())
+print("--- END DEBUG ---\n")
+
 
 # Photo Mapping (optional customization)
 photo_mapping = {
