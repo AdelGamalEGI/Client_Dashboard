@@ -4,3 +4,4 @@ dash-bootstrap-components
 gspread
 gspread_dataframe
 oauth2client
+waitress
