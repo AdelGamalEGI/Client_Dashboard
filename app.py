@@ -7,11 +7,29 @@ import plotly.graph_objects as go
 import os
 from datetime import datetime
 
-# Load updated workbook
-file_path = 'Project_ Planning_Workbook.xlsx'
-df_workstreams = pd.read_excel(file_path, sheet_name='Workstreams')
-df_risks = pd.read_excel(file_path, sheet_name='Risk_Register')
-df_issues = pd.read_excel(file_path, sheet_name='Issue_Tracker')
+
+import gspread
+from gspread_dataframe import get_as_dataframe, set_with_dataframe
+from oauth2client.service_account import ServiceAccountCredentials
+
+# Google Sheets authentication
+scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
+client = gspread.authorize(creds)
+
+# Open the spreadsheet and read sheets into dataframes
+spreadsheet = client.open("Project_Planning_Workbook")  # Google Sheet name
+ws_sheet = spreadsheet.worksheet("Workstreams")
+risks_sheet = spreadsheet.worksheet("Risk_Register")
+issues_sheet = spreadsheet.worksheet("Issue_Tracker")
+refs_sheet = spreadsheet.worksheet("References")
+
+# Convert to DataFrames (drop rows that are fully empty)
+df_workstreams = get_as_dataframe(ws_sheet).dropna(how='all')
+df_risks = get_as_dataframe(risks_sheet).dropna(how='all')
+df_issues = get_as_dataframe(issues_sheet).dropna(how='all')
+df_team = get_as_dataframe(refs_sheet).dropna(how='all')
+
 
 # Preprocess dates and percentages
 df_workstreams['Start Date'] = pd.to_datetime(df_workstreams['Start Date'], errors='coerce')
