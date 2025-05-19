@@ -104,7 +104,7 @@ task_table = dbc.Table.from_dataframe(tasks_this_month[['Task Name', 'Actual % C
 assigned_people = tasks_this_month['Assigned To'].dropna().astype(str).str.split(',').explode().str.strip().str.lower()
 active_names = assigned_people.unique()
 
-df_team = pd.read_excel(file_path, sheet_name='References')
+#df_team = pd.read_excel(file_path, sheet_name='References')
 df_team['Person Name Lower'] = df_team['Person Name'].astype(str).str.strip().str.lower()
 active_members = df_team[df_team['Person Name Lower'].isin(active_names)]
 
