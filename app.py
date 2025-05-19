@@ -80,7 +80,7 @@ for _, row in ws_summary.iterrows():
 ws_chart.update_layout(barmode='overlay', title='Workstream Progress', height=300)
 
 # Section 3: Tasks This Month Table
-task_table = dbc.Table.from_dataframe(tasks_this_month[['Activity Name', 'Actual % Complete']], striped=True, bordered=True, hover=True)
+task_table = dbc.Table.from_dataframe(tasks_this_month[['Task Name', 'Actual % Complete']], striped=True, bordered=True, hover=True)
 
 # Section 4: Active Team Members (from "Assigned To")
 if 'Assigned To' in df_workstreams.columns:
