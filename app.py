@@ -53,7 +53,7 @@ num_tasks = tasks_this_month.shape[0]
 open_issues = df_issues[df_issues['Status'].str.lower().str.strip() == 'open']
 num_open_issues = open_issues.shape[0]
 
-open_risks = df_risks[df_risks['Status'].str.lower().str.strip() == 'open']
+open_risks = df_risks[df_risks['Status'].fillna('').str.lower().str.strip() == 'open']
 num_open_risks = open_risks.shape[0]
 
 # Risk color
