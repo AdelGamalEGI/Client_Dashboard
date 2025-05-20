@@ -48,7 +48,13 @@ def member_card(name, role):
     )
 
 # Build Dash app
-app = dash.Dash(__name__, suppress_callback_exceptions=True, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+
+app.layout = html.Div([
+    dcc.Location(id="url", refresh=False),
+    html.Div(id="page-content")
+])
+
 server = app.server
 
 
@@ -191,6 +197,8 @@ if __name__ == '__main__':
 
 
 
+# --- Dashboard and Risk View Layouts ---
+
 dashboard_layout = dbc.Container([
     html.H2('Client Dashboard', className='text-center my-4'),
 
@@ -210,17 +218,17 @@ dashboard_layout = dbc.Container([
     ])
 ], fluid=True)
 
-
-
 risk_view_layout = html.Div([
-    html.H2("Risk View Loaded", className="my-3 text-danger"),
-    html.P("This is a placeholder for the risk dashboard."),
-    dcc.Link("← Back to Dashboard", href="/", className="btn btn-secondary")
-])
-
-app.layout = html.Div([
-    dcc.Location(id="url", refresh=False),
-    html.Div(id="page-content")
+    html.H2("Risk View", className="my-3"),
+    dcc.Link("← Back to Dashboard", href="/", className="btn btn-secondary mb-4"),
+    dbc.Row([
+        dbc.Col(html.Div("📊 Risk Summary (Top Left)", className="border p-3"), width=6),
+        dbc.Col(html.Div("🧱 Risk Matrix (Top Right)", className="border p-3"), width=6),
+    ]),
+    dbc.Row([
+        dbc.Col(html.Div("📋 Risk Table (Bottom)", className="border p-3",
+                         style={"height": "300px", "overflowY": "auto"}), width=12)
+    ])
 ])
 
 @app.callback(
@@ -230,11 +238,5 @@ app.layout = html.Div([
 def display_page(pathname):
     if pathname == "/risks":
         return risk_view_layout
-    return dashboard_layout
-
-
-
-import os
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8050))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    else:
+        return dashboard_layout
