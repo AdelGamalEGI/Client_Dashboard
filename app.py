@@ -51,28 +51,7 @@ def member_card(name, role):
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 server = app.server
 
-app.layout = dbc.Container([
-    html.H2('Client Dashboard', className='text-center my-4'),
 
-    dcc.Interval(id='interval-refresh', interval=60*1000, n_intervals=0),
-
-    dbc.Row([
-        
-
-dbc.Col(html.Div(
-    dbc.Card(id='kpi-summary', className='shadow-sm'),
-    style={"height": "300px", "overflowY": "auto"}
-), width=6)
-
-,
-        dbc.Col(dbc.Card([dbc.CardHeader('Workstream Progress'), dbc.CardBody([dcc.Graph(id='workstream-progress-chart')])], className="shadow-sm"), width=6),
-    ], className='mb-4'),
-
-    dbc.Row([
-        dbc.Col(dbc.Card([dbc.CardHeader('Tasks This Month'), dbc.CardBody([html.Div(dbc.Table(id='tasks-table'), style={"maxHeight": "300px", "overflowY": "auto"})])], className="shadow-sm"), width=6),
-        dbc.Col(dbc.Card([dbc.CardHeader('Active Team Members'), dbc.CardBody(html.Div(id='team-members', style={"maxHeight": "300px", "overflowY": "auto"}))], className="shadow-sm"), width=6),
-    ])
-], fluid=True)
 
 @app.callback(
     Output('kpi-summary', 'children'),
@@ -141,7 +120,7 @@ def refresh_dashboard(n):
                     html.P("Tasks This Month", className="text-muted", style={"textAlign": "center"})
                 ])),
                 dbc.Col(html.Div([
-                    html.H2([dbc.Badge(f"{num_open_risks}", color=risk_color, className="px-3 py-2", pill=True)],
+                    html.H2([dcc.Link(dbc.Badge(f"{num_open_risks}", color=risk_color, className="px-3 py-2", pill=True), href="/risks", style={"textDecoration": "none"})],
                             className="mb-0", style={"textAlign": "center"}),
                     html.P("Open Risks", className="text-muted", style={"textAlign": "center"})
                 ])),
@@ -209,3 +188,56 @@ if __name__ == '__main__':
     from waitress import serve
     port = int(os.environ.get('PORT', 8050))
     serve(app.server, host='0.0.0.0', port=port)
+
+
+
+dashboard_layout = dbc.Container([
+    html.H2('Client Dashboard', className='text-center my-4'),
+
+    dcc.Interval(id='interval-refresh', interval=60*1000, n_intervals=0),
+
+    dbc.Row([
+        dbc.Col(html.Div(
+            dbc.Card(id='kpi-summary', className='shadow-sm'),
+            style={"height": "300px", "overflowY": "auto"}
+        ), width=6),
+        dbc.Col(dbc.Card([dbc.CardHeader('Workstream Progress'), dbc.CardBody([dcc.Graph(id='workstream-progress-chart')])], className="shadow-sm"), width=6),
+    ], className='mb-4'),
+
+    dbc.Row([
+        dbc.Col(dbc.Card([dbc.CardHeader('Tasks This Month'), dbc.CardBody([html.Div(dbc.Table(id='tasks-table'), style={"maxHeight": "300px", "overflowY": "auto"})])], className="shadow-sm"), width=6),
+        dbc.Col(dbc.Card([dbc.CardHeader('Active Team Members'), dbc.CardBody(html.Div(id='team-members', style={"maxHeight": "300px", "overflowY": "auto"}))], className="shadow-sm"), width=6),
+    ])
+], fluid=True)
+
+
+
+risk_view_layout = html.Div([
+    html.H2("Risk View", className="my-3"),
+    dcc.Link("← Back to Dashboard", href="/", className="btn btn-secondary mb-4"),
+    dbc.Row([
+        dbc.Col(html.Div("📊 Risk Summary (Top Left)", className="border p-3"), width=6),
+        dbc.Col(html.Div("🧱 Risk Matrix (Top Right)", className="border p-3"), width=6),
+    ]),
+    dbc.Row([
+        dbc.Col(html.Div("📋 Risk Table (Bottom)", className="border p-3", 
+                         style={"height": "300px", "overflowY": "auto"}), width=12)
+    ])
+])
+
+
+
+app.layout = html.Div([
+    dcc.Location(id="url", refresh=False),
+    html.Div(id="page-content")
+])
+
+@app.callback(
+    Output("page-content", "children"),
+    Input("url", "pathname")
+)
+def display_page(pathname):
+    if pathname == "/risks":
+        return risk_view_layout
+    else:
+        return dashboard_layout
