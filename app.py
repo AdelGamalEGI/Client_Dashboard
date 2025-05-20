@@ -123,20 +123,28 @@ def refresh_dashboard(n):
     else:
         risk_color = 'warning' if num_open_risks > 0 else 'secondary'
 
-    kpi_card = [
-        dbc.CardHeader("KPI Summary"),
-        dbc.CardBody([
-            dbc.Row([
-                dbc.Col(html.Div([html.H2(f"{num_tasks}", className="text-primary text-center mb-0"),
-                                  html.P("Tasks This Month", className="text-muted text-center")])),
-                dbc.Col(html.Div([html.H2([dbc.Badge(f"{num_open_risks}", color=risk_color, className="px-3 py-2", pill=True)],
-                                          className="text-center mb-0"),
-                                  html.P("Open Risks", className="text-muted text-center")])),
-                dbc.Col(html.Div([html.H2(f"{num_open_issues}", className="text-primary text-center mb-0"),
-                                  html.P("Open Issues", className="text-muted text-center")])),
-            ], justify="center")
-        ])
-    ]
+    
+kpi_card = [
+    dbc.CardHeader("KPI Summary"),
+    dbc.CardBody(html.Div([
+        dbc.Row([
+            dbc.Col(html.Div([
+                html.H2(f"{num_tasks}", className="text-primary mb-0", style={"fontWeight": "bold", "fontSize": "2rem", "textAlign": "center"}),
+                html.P("Tasks This Month", className="text-muted", style={"textAlign": "center"})
+            ])),
+            dbc.Col(html.Div([
+                html.H2([dbc.Badge(f"{num_open_risks}", color=risk_color, className="px-3 py-2", pill=True)],
+                        className="mb-0", style={"textAlign": "center"}),
+                html.P("Open Risks", className="text-muted", style={"textAlign": "center"})
+            ])),
+            dbc.Col(html.Div([
+                html.H2(f"{num_open_issues}", className="text-primary mb-0", style={"fontWeight": "bold", "fontSize": "2rem", "textAlign": "center"}),
+                html.P("Open Issues", className="text-muted", style={"textAlign": "center"})
+            ])),
+        ], justify="center")
+    ], style={"maxHeight": "300px", "overflowY": "auto"}))
+]
+
 
     # Chart
     fig = go.Figure()
