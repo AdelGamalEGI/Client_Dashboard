@@ -49,6 +49,12 @@ def member_card(name, role):
 
 # Build Dash app
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+
+app.layout = html.Div([
+    dcc.Location(id="url", refresh=False),
+    html.Div(id="page-content")
+])
+
 server = app.server
 
 
@@ -191,6 +197,8 @@ if __name__ == '__main__':
 
 
 
+# --- Dashboard and Risk View Layouts ---
+
 dashboard_layout = dbc.Container([
     html.H2('Client Dashboard', className='text-center my-4'),
 
@@ -210,8 +218,6 @@ dashboard_layout = dbc.Container([
     ])
 ], fluid=True)
 
-
-
 risk_view_layout = html.Div([
     html.H2("Risk View", className="my-3"),
     dcc.Link("← Back to Dashboard", href="/", className="btn btn-secondary mb-4"),
@@ -220,16 +226,9 @@ risk_view_layout = html.Div([
         dbc.Col(html.Div("🧱 Risk Matrix (Top Right)", className="border p-3"), width=6),
     ]),
     dbc.Row([
-        dbc.Col(html.Div("📋 Risk Table (Bottom)", className="border p-3", 
+        dbc.Col(html.Div("📋 Risk Table (Bottom)", className="border p-3",
                          style={"height": "300px", "overflowY": "auto"}), width=12)
     ])
-])
-
-
-
-app.layout = html.Div([
-    dcc.Location(id="url", refresh=False),
-    html.Div(id="page-content")
 ])
 
 @app.callback(
