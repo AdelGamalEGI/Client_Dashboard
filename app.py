@@ -155,13 +155,44 @@ def refresh_dashboard(n):
 
 
     # Chart
+    
     fig = go.Figure()
     for _, row in ws_summary.iterrows():
+        # Determine bar color for actual
         delta = abs(row['Planned %'] - row['Actual %'])
-        color = 'green' if delta <= 15 else 'orange' if delta <= 30 else 'red'
-        fig.add_trace(go.Bar(name='Planned', x=[row['Planned %']], y=[row['Workstream']], orientation='h', marker_color='blue'))
-        fig.add_trace(go.Bar(name='Actual', x=[row['Actual %']], y=[row['Workstream']], orientation='h', marker_color=color))
-    fig.update_layout(barmode='overlay', title='Workstream Progress', height=300)
+        actual_color = 'green' if delta <= 15 else 'orange' if delta <= 30 else 'red'
+
+        # Add Planned bar
+        fig.add_trace(go.Bar(
+            name='Planned',
+            x=[row['Workstream']],
+            y=[row['Planned %']],
+            text=[f"{row['Planned %']:.0f}%"],
+            textposition='auto',
+            marker_color='blue'
+        ))
+
+        # Add Actual bar
+        fig.add_trace(go.Bar(
+            name='Actual',
+            x=[row['Workstream']],
+            y=[row['Actual %']],
+            text=[f"{row['Actual %']:.0f}%"],
+            textposition='auto',
+            marker_color=actual_color
+        ))
+
+    fig.update_layout(
+        barmode='group',
+        title='Workstream Progress',
+        height=300,
+        xaxis_title='',
+        yaxis_title='',
+        yaxis=dict(showticklabels=False),
+        xaxis=dict(title='', tickangle=0),
+        showlegend=True
+    )
+
 
     # Table
     table = dbc.Table.from_dataframe(tasks_this_month[['Task Name', 'Actual % Complete']], striped=True, bordered=True, hover=True)
