@@ -13,7 +13,6 @@ app = dash.Dash(__name__, suppress_callback_exceptions=True, external_stylesheet
 server = app.server
 
 # --- Layouts ---
-
 home_layout = html.Div([
     html.H1("Welcome to AIS Portal", className="text-center my-4"),
     dbc.Row([
@@ -44,38 +43,66 @@ def risk_dashboard():
     sheet = client.open("Project_Planning_Workbook")
     df_risks = get_as_dataframe(sheet.worksheet("Risk_Register")).dropna(how="all")
 
-    # Clean and prep
     df_risks['Likelihood (1-5)'] = pd.to_numeric(df_risks['Likelihood (1-5)'], errors='coerce')
     df_risks['Impact (1-5)'] = pd.to_numeric(df_risks['Impact (1-5)'], errors='coerce')
+    df_risks['Risk Score'] = pd.to_numeric(df_risks['Risk Score'], errors='coerce')
     df_risks = df_risks[df_risks['Status'].astype(str).str.lower().str.strip() == 'open']
 
-    # --- Summary (Top Left): Count by Risk Category ---
-    summary = df_risks.groupby('Risk Category')['Risk Score'].agg(['count']).reset_index()
-    summary_chart = dbc.Card([
-        dbc.CardHeader("Open Risks by Category"),
+    # --- New Summary Block (Top Left) ---
+    score_counts = {
+        "High": df_risks[(df_risks['Risk Score'] >= 10)].shape[0],
+        "Medium": df_risks[(df_risks['Risk Score'] >= 5) & (df_risks['Risk Score'] < 10)].shape[0],
+        "Low": df_risks[(df_risks['Risk Score'] >= 1) & (df_risks['Risk Score'] < 5)].shape[0],
+    }
+
+    summary_block = dbc.Card([
+        dbc.CardHeader("Open Risks by Severity"),
         dbc.CardBody([
-            dcc.Graph(
-                figure=go.Figure(
-                    data=[go.Bar(x=summary['Risk Category'], y=summary['count'], marker_color='crimson')],
-                    layout=go.Layout(height=300, margin=dict(l=30, r=30, t=40, b=30))
-                )
-            )
+            html.Div([
+                html.Div([
+                    html.Span("🟥 High", style={"fontWeight": "bold", "color": "red", "marginRight": "10px"}),
+                    html.Span(f"{score_counts['High']} risks")
+                ], className="mb-2"),
+                html.Div([
+                    html.Span("🟧 Medium", style={"fontWeight": "bold", "color": "orange", "marginRight": "10px"}),
+                    html.Span(f"{score_counts['Medium']} risks")
+                ], className="mb-2"),
+                html.Div([
+                    html.Span("🟨 Low", style={"fontWeight": "bold", "color": "gold", "marginRight": "10px"}),
+                    html.Span(f"{score_counts['Low']} risks")
+                ])
+            ])
         ])
     ])
 
-    # --- Matrix (Top Right) ---
-    matrix = df_risks.groupby(['Likelihood (1-5)', 'Impact (1-5)']).size().reset_index(name='Count')
-    heatmap = go.Figure(data=go.Heatmap(
-        z=matrix['Count'],
-        x=matrix['Likelihood (1-5)'],
-        y=matrix['Impact (1-5)'],
-        colorscale='YlOrRd'
-    ))
-    heatmap.update_layout(title="Risk Matrix (Likelihood × Impact)", height=300, margin=dict(l=40, r=20, t=40, b=20))
+    # --- New Risk Matrix ---
+    matrix_df = df_risks[['Risk ID', 'Likelihood (1-5)', 'Impact (1-5)', 'Risk Score']].dropna()
+    matrix_cells = {}
+    for _, row in matrix_df.iterrows():
+        key = (int(row['Likelihood (1-5)']), int(row['Impact (1-5)']))
+        matrix_cells.setdefault(key, []).append(str(row['Risk ID']))
 
-    matrix_chart = dbc.Card([
-        dbc.CardHeader("Risk Matrix"),
-        dbc.CardBody(dcc.Graph(figure=heatmap))
+    matrix_grid = []
+    for impact in range(5, 0, -1):
+        row = []
+        for likelihood in range(1, 6):
+            risk_ids = matrix_cells.get((likelihood, impact), [])
+            score = impact * likelihood
+            if score >= 10:
+                color = "red"
+            elif score >= 5:
+                color = "orange"
+            else:
+                color = "yellow"
+            cell_content = html.Div(", ".join(risk_ids), style={"fontSize": "0.75rem"})
+            row.append(html.Td(cell_content, style={"backgroundColor": color, "border": "1px solid #ccc", "padding": "5px"}))
+        matrix_grid.append(html.Tr(row))
+
+    matrix_table = dbc.Card([
+        dbc.CardHeader("Risk Matrix (Likelihood × Impact)"),
+        dbc.CardBody([
+            html.Table(matrix_grid, style={"width": "100%", "borderCollapse": "collapse"})
+        ])
     ])
 
     # --- Risk Table (Bottom) ---
@@ -88,12 +115,11 @@ def risk_dashboard():
         style_header={"backgroundColor": "rgb(230, 230, 230)", "fontWeight": "bold"}
     )
 
-    # Combine Layout
     return dbc.Container([
         html.H2("Risk Dashboard", className="text-center my-4"),
         dbc.Row([
-            dbc.Col(summary_chart, width=6),
-            dbc.Col(matrix_chart, width=6)
+            dbc.Col(summary_block, width=6),
+            dbc.Col(matrix_table, width=6)
         ], className="mb-4"),
         dbc.Row([
             dbc.Col([
@@ -103,7 +129,7 @@ def risk_dashboard():
         ])
     ], fluid=True)
 
-# Deployment config
+# Run
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8050))
     app.run(host="0.0.0.0", port=port, debug=True)
