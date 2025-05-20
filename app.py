@@ -62,8 +62,8 @@ app.layout = dbc.Container([
     ], className='mb-4'),
 
     dbc.Row([
-        dbc.Col(dbc.Card([dbc.CardHeader('Tasks This Month'), dbc.CardBody([dbc.Table(id='tasks-table')])], className="shadow-sm"), width=6),
-        dbc.Col(dbc.Card([dbc.CardHeader('Active Team Members'), dbc.CardBody(id='team-members')], className="shadow-sm"), width=6),
+        dbc.Col(dbc.Card([dbc.CardHeader('Tasks This Month'), dbc.CardBody([html.Div(dbc.Table(id='tasks-table'), style={"maxHeight": "300px", "overflowY": "auto"})])], className="shadow-sm"), width=6),
+        dbc.Col(dbc.Card([dbc.CardHeader('Active Team Members'), dbc.CardBody(html.Div(id='team-members', style={"maxHeight": "300px", "overflowY": "auto"}))], className="shadow-sm"), width=6),
     ])
 ], fluid=True)
 
