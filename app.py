@@ -124,9 +124,10 @@ def refresh_dashboard(n):
         risk_color = 'warning' if num_open_risks > 0 else 'secondary'
 
     
+    
     kpi_card = [
         dbc.CardHeader("KPI Summary"),
-        dbc.CardBody(html.Div([
+        dbc.CardBody([
             dbc.Row([
                 dbc.Col(html.Div([
                     html.H2(f"{num_tasks}", className="text-primary mb-0", style={"fontWeight": "bold", "fontSize": "2rem", "textAlign": "center"}),
@@ -142,7 +143,7 @@ def refresh_dashboard(n):
                     html.P("Open Issues", className="text-muted", style={"textAlign": "center"})
                 ])),
             ], justify="center")
-        ], style={"maxHeight": "300px", "overflowY": "auto"}))
+        ], style={"maxHeight": "300px", "overflowY": "auto"})
     ]
 
 
