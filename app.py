@@ -58,10 +58,12 @@ app.layout = dbc.Container([
 
     dbc.Row([
         
+
 dbc.Col(html.Div(
     dbc.Card(id='kpi-summary', className='shadow-sm'),
-    style={"maxHeight": "300px", "overflowY": "auto"}
+    style={"height": "300px", "overflowY": "auto"}
 ), width=6)
+
 ,
         dbc.Col(dbc.Card([dbc.CardHeader('Workstream Progress'), dbc.CardBody([dcc.Graph(id='workstream-progress-chart')])], className="shadow-sm"), width=6),
     ], className='mb-4'),
