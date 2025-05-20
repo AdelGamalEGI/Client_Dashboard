@@ -57,7 +57,12 @@ app.layout = dbc.Container([
     dcc.Interval(id='interval-refresh', interval=60*1000, n_intervals=0),
 
     dbc.Row([
-        dbc.Col(dbc.Card(id='kpi-summary', className='shadow-sm'), width=6),
+        
+dbc.Col(html.Div(
+    dbc.Card(id='kpi-summary', className='shadow-sm'),
+    style={"maxHeight": "300px", "overflowY": "auto"}
+), width=6)
+,
         dbc.Col(dbc.Card([dbc.CardHeader('Workstream Progress'), dbc.CardBody([dcc.Graph(id='workstream-progress-chart')])], className="shadow-sm"), width=6),
     ], className='mb-4'),
 
