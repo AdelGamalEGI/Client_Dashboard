@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 import gspread
 from gspread_dataframe import get_as_dataframe
 from oauth2client.service_account import ServiceAccountCredentials
+import traceback
 
 # Initialize app
 app = dash.Dash(
@@ -33,14 +34,9 @@ def member_card(name, role):
     key = name.strip().lower()
     img_file = photo_mapping.get(key)
     if img_file:
-        img_tag = html.Img(
-            src=app.get_asset_url(img_file),
-            height="45px",
-            style={'borderRadius': '50%'}
-        )
+        img_tag = html.Img(src=app.get_asset_url(img_file), height="45px", style={'borderRadius': '50%'})
     else:
         img_tag = html.Div("👤", style={'fontSize': '2rem'})
-
     return dbc.Card(
         dbc.Row([
             dbc.Col(img_tag, width='auto'),
@@ -56,31 +52,18 @@ def member_card(name, role):
 home_layout = html.Div([
     html.H1("Welcome to AIS Portal", className="text-center my-4"),
     dbc.Row([
-        dbc.Col(
-            dcc.Link(
-                dbc.Button("📊 Dashboard", color="primary", className="btn-lg w-100"),
-                href="/dashboard"
-            ),
-            width=6
-        ),
-        dbc.Col(
-            dcc.Link(
-                dbc.Button("🛡️ Risk View", color="danger", className="btn-lg w-100"),
-                href="/risks"
-            ),
-            width=6
-        ),
+        dbc.Col(dcc.Link(dbc.Button("📊 Dashboard", color="primary", className="btn-lg w-100"), href="/dashboard"), width=6),
+        dbc.Col(dcc.Link(dbc.Button("🛡️ Risk View", color="danger", className="btn-lg w-100"), href="/risks"), width=6),
     ], className="my-4 text-center", justify="center")
 ])
 
 # App layout
-title = html.Div(id="page-content")
 app.layout = html.Div([
     dcc.Location(id="url", refresh=False),
-    title
+    html.Div(id="page-content")
 ])
 
-# Routing callback: single definition
+# Routing: single callback
 @app.callback(
     Output("page-content", "children"),
     Input("url", "pathname")
@@ -90,28 +73,21 @@ def display_page(pathname):
         return main_dashboard()
     elif pathname == "/risks":
         return risk_dashboard()
-    else:
-        return home_layout
+    return home_layout
 
 # Risk Dashboard
 def risk_dashboard():
-    # Authenticate and load sheet
-    scope = [
-        'https://spreadsheets.google.com/feeds',
-        'https://www.googleapis.com/auth/drive'
-    ]
+    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
     creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
     client = gspread.authorize(creds)
     sheet = client.open("Project_Planning_Workbook")
 
-    # Load and clean data
     df_risks = get_as_dataframe(sheet.worksheet("Risk_Register")).dropna(how="all")
     df_risks['Likelihood (1-5)'] = pd.to_numeric(df_risks['Likelihood (1-5)'], errors='coerce')
     df_risks['Impact (1-5)'] = pd.to_numeric(df_risks['Impact (1-5)'], errors='coerce')
     df_risks['Risk Score'] = df_risks['Likelihood (1-5)'] * df_risks['Impact (1-5)']
     df_risks = df_risks[df_risks['Status'].str.lower().str.strip() == 'open']
 
-    # Summary counts
     score_counts = {
         "High": df_risks[df_risks['Risk Score'] >= 10].shape[0],
         "Medium": df_risks[(df_risks['Risk Score'] >= 5) & (df_risks['Risk Score'] < 10)].shape[0],
@@ -129,7 +105,6 @@ def risk_dashboard():
         ])
     ], className="mb-4")
 
-    # Risk matrix
     matrix_cells = {}
     for _, row in df_risks.iterrows():
         key = (int(row['Likelihood (1-5)']), int(row['Impact (1-5)']))
@@ -142,12 +117,8 @@ def risk_dashboard():
             ids = matrix_cells.get((likelihood, impact), [])
             score = impact * likelihood
             color = 'red' if score >= 10 else 'orange' if score >= 5 else 'yellow'
-            row_cells.append(
-                html.Td(
-                    html.Div(", ".join(ids), style={"fontSize": "0.75rem"}),
-                    style={"backgroundColor": color, "border": "1px solid #ccc", "padding": "12px"}
-                )
-            )
+            row_cells.append(html.Td(html.Div(", ".join(ids), style={"fontSize": "0.75rem"}),
+                                     style={"backgroundColor": color, "border": "1px solid #ccc", "padding": "12px"}))
         matrix_grid.append(html.Tr(row_cells))
 
     matrix_table = dbc.Card([
@@ -155,7 +126,6 @@ def risk_dashboard():
         dbc.CardBody(html.Table(matrix_grid, style={"width": "100%", "borderCollapse": "collapse"}))
     ], className="mb-4")
 
-    # Risk table
     cols = ["Risk ID", "Risk Description", "Likelihood (1-5)", "Impact (1-5)", "Risk Score", "Status"]
     risk_table = dash_table.DataTable(
         columns=[{"name": c, "id": c} for c in cols],
@@ -167,10 +137,7 @@ def risk_dashboard():
 
     return dbc.Container([
         html.H2("Risk Dashboard", className="text-center my-4"),
-        dbc.Row([
-            dbc.Col(summary_block, width=6),
-            dbc.Col(matrix_table, width=6)
-        ]),
+        dbc.Row([dbc.Col(summary_block, width=6), dbc.Col(matrix_table, width=6)]),
         dbc.Row(dbc.Col([html.H5("Open Risks Table", className="mb-2"), risk_table]))
     ], fluid=True)
 
@@ -189,7 +156,7 @@ def main_dashboard():
         ])
     ], fluid=True)
 
-# Refresh callback
+# Refresh callback with error handling
 @app.callback(
     [Output('kpi-summary','children'),
      Output('workstream-progress-chart','figure'),
@@ -198,49 +165,59 @@ def main_dashboard():
     Input('interval-refresh','n_intervals')
 )
 def refresh_dashboard(n):
-    # Load data
-    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
-    client = gspread.authorize(creds)
-    sheet = client.open("Project_Planning_Workbook")
+    try:
+        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+        creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
+        client = gspread.authorize(creds)
+        sheet = client.open("Project_Planning_Workbook")
 
-    df_ws = get_as_dataframe(sheet.worksheet("Workstreams")).dropna(how='all')
-    df_issues = get_as_dataframe(sheet.worksheet("Issue_Tracker")).dropna(how='all')
-    values = sheet.worksheet("Risk_Register").get_all_values()
-    df_risks = pd.DataFrame(values[1:], columns=values[0])
-    df_refs = get_as_dataframe(sheet.worksheet("References")).dropna(how='all')
+        df_ws = get_as_dataframe(sheet.worksheet("Workstreams")).dropna(how='all')
+        df_issues = get_as_dataframe(sheet.worksheet("Issue_Tracker")).dropna(how='all')
+        df_risks = get_as_dataframe(sheet.worksheet("Risk_Register")).dropna(how='all')
+        df_refs = get_as_dataframe(sheet.worksheet("References")).dropna(how='all')
 
-    # Compute KPIs (example)
-    tasks_month = df_ws.shape[0]
-    open_issues = df_issues[df_issues['Status'].str.lower().str.strip()=='open'].shape[0]
-    open_risks = df_risks[df_risks['Status'].str.lower().str.strip()=='open'].shape[0]
+        # KPIs
+        tasks_month = df_ws.shape[0]
+        open_issues = df_issues[df_issues['Status'].str.lower().str.strip()=='open'].shape[0]
+        open_risks = df_risks[df_risks['Status'].str.lower().str.strip()=='open'].shape[0]
 
-    # KPI card
-    kpi = dbc.Card([
-        dbc.CardHeader("KPI Summary"),
-        dbc.CardBody([
-            dbc.Row([
+        kpi = dbc.Card([
+            dbc.CardHeader("KPI Summary"),
+            dbc.CardBody(dbc.Row([
                 dbc.Col(html.Div([html.H2(tasks_month), html.P("Tasks This Month")])),
                 dbc.Col(html.Div([html.H2(open_risks), html.P("Open Risks")])),
                 dbc.Col(html.Div([html.H2(open_issues), html.P("Open Issues")]))
-            ])
-        ])
-    ])
+            ]))
+        ], className="shadow-sm mb-4")
 
-    # Simple empty figure (placeholder)
-    fig = go.Figure()
-    fig.update_layout(height=300)
+        # Placeholder empty figure
+        fig = go.Figure()
+        fig.update_layout(height=300)
 
-    # Tasks table
-    table = dbc.Table.from_dataframe(df_ws[['Task Name','Actual % Complete']], striped=True, bordered=True, hover=True)
+        # Tasks table
+        if 'Task Name' in df_ws.columns:
+            table_df = df_ws[['Task Name', 'Actual % Complete']]
+        elif 'Activity Name' in df_ws.columns:
+            table_df = df_ws[['Activity Name', 'Actual % Complete']]
+        else:
+            table_df = df_ws
+        table = dbc.Table.from_dataframe(table_df, striped=True, bordered=True, hover=True)
 
-    # Team members
-    assigned = df_ws['Assigned To'].dropna().str.split(',').explode().str.strip().str.lower()
-    df_refs['name_lower'] = df_refs['Person Name'].str.strip().str.lower()
-    active = df_refs[df_refs['name_lower'].isin(assigned)]
-    members = [member_card(r['Person Name'], r['Role']) for _, r in active.iterrows()]
+        # Team members
+        assigned = df_ws.get('Assigned To', pd.Series()).dropna().astype(str).str.split(',').explode().str.strip().str.lower()
+        df_refs['name_lower'] = df_refs.get('Person Name', pd.Series()).astype(str).str.strip().str.lower()
+        active = df_refs[df_refs['name_lower'].isin(assigned)]
+        members = [member_card(r['Person Name'], r.get('Role','')) for _, r in active.iterrows()]
 
-    return kpi, fig, table, members
+        return kpi, fig, table, members
+
+    except Exception as e:
+        err_text = traceback.format_exc()
+        error_card = dbc.Card([
+            dbc.CardHeader("Error Loading Dashboard"),
+            dbc.CardBody(html.Pre(err_text, style={'whiteSpace': 'pre-wrap', 'overflowX': 'auto'}), className='text-danger')
+        ], color="light", outline=True)
+        return error_card, go.Figure(), html.Pre(err_text), []
 
 # Run server
 if __name__ == "__main__":
