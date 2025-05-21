@@ -17,7 +17,11 @@ app = dash.Dash(
 )
 server = app.server
 
-# Initialize Google Sheets client once
+# Helper to ensure string operations never fail
+def ensure_str(series: pd.Series) -> pd.Series:
+    return series.fillna('').astype(str)
+
+# Initialize Google Sheets client once\ nSCOPES = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 SCOPES = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 CREDS = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', SCOPES)
 GS_CLIENT = gspread.authorize(CREDS)
@@ -83,18 +87,25 @@ def display_page(pathname):
 
 # Risk Dashboard
 def risk_dashboard():
+    # Load raw values
     values = SPREADSHEET.worksheet("Risk_Register").get_all_values()
     df = pd.DataFrame(values[1:], columns=values[0])
-    df['Likelihood (1-5)'] = pd.to_numeric(df['Likelihood (1-5)'], errors='coerce')
-    df['Impact (1-5)'] = pd.to_numeric(df['Impact (1-5)'], errors='coerce')
-    df['Risk Score'] = pd.to_numeric(df['Risk Score'], errors='coerce')
-    df = df[df['Status'].str.lower().str.strip() == 'open']
+
+    # Clean and coerce
+    df['Status'] = ensure_str(df.get('Status')).str.lower().str.strip()
+    df['Risk Level'] = ensure_str(df.get('Risk Level')).str.lower().str.strip()
+    df['Likelihood (1-5)'] = pd.to_numeric(df.get('Likelihood (1-5)'), errors='coerce').fillna(0)
+    df['Impact (1-5)'] = pd.to_numeric(df.get('Impact (1-5)'), errors='coerce').fillna(0)
+    df['Risk Score'] = pd.to_numeric(df.get('Risk Score'), errors='coerce').fillna(0)
+
+    # Only open risks
+    df = df[df['Status'] == 'open']
 
     # Summary
     counts = {
-        'High': df[df['Risk Level'].str.lower()=='high'].shape[0],
-        'Medium': df[df['Risk Level'].str.lower()=='medium'].shape[0],
-        'Low': df[df['Risk Level'].str.lower()=='low'].shape[0]
+        'High': df[df['Risk Level']=='high'].shape[0],
+        'Medium': df[df['Risk Level']=='medium'].shape[0],
+        'Low': df[df['Risk Level']=='low'].shape[0]
     }
     summary = dbc.Card([
         dbc.CardHeader("Open Risks by Severity"),
@@ -113,12 +124,12 @@ def risk_dashboard():
         key = (int(r['Likelihood (1-5)']), int(r['Impact (1-5)']))
         cells.setdefault(key, []).append(str(r['Risk ID']))
     grid = []
-    for imp in range(5,0,-1):
+    for imp in range(5, 0, -1):
         row = []
-        for lik in range(1,6):
-            ids = cells.get((lik,imp), [])
-            score = lik*imp
-            color = 'red' if score>=11 else 'orange' if score>=6 else 'yellow'
+        for lik in range(1, 6):
+            ids = cells.get((lik, imp), [])
+            score = lik * imp
+            color = 'red' if score >= 11 else 'orange' if score >= 6 else 'yellow'
             row.append(html.Td(
                 html.Div(", ".join(ids), style={"fontSize":"0.65rem","whiteSpace":"normal","wordWrap":"break-word","overflow":"hidden"}),
                 style={
@@ -136,6 +147,7 @@ def risk_dashboard():
         dbc.CardBody(html.Table(grid, style={"borderCollapse":"collapse"}))
     ], className="mb-4")
 
+    # Risk table
     table = dash_table.DataTable(
         columns=[{"name":c,"id":c} for c in ["Risk ID","Risk Description","Likelihood (1-5)","Impact (1-5)","Risk Level","Status"]],
         data=df.to_dict('records'),
@@ -145,30 +157,29 @@ def risk_dashboard():
     )
 
     return dbc.Container([
-        html.H2("Risk Dashboard",className="text-center my-4"),
-        dbc.Row([dbc.Col(summary,width=6),dbc.Col(matrix,width=6)],className="mb-4"),
-        dbc.Row(dbc.Col([html.H5("Open Risks Table",className="mb-2"),table]))
-    ],fluid=True)
+        html.H2("Risk Dashboard", className="text-center my-4"),
+        dbc.Row([dbc.Col(summary, width=6), dbc.Col(matrix, width=6)], className="mb-4"),
+        dbc.Row(dbc.Col([html.H5("Open Risks Table", className="mb-2"), table]))
+    ], fluid=True)
 
 # Main Dashboard
 def main_dashboard():
     return dbc.Container([
-        html.H2('Client Dashboard',className='text-center my-4'),
-        dcc.Interval(id='interval-refresh',interval=60*1000,n_intervals=0),
+        html.H2('Client Dashboard', className='text-center my-4'),
+        dcc.Interval(id='interval-refresh', interval=60*1000, n_intervals=0),
         dbc.Row([
-            dbc.Col(html.Div(id='kpi-summary'),width=6),
-            dbc.Col(dcc.Graph(id='workstream-progress-chart'),width=6)
-        ],className='mb-4'),
+            dbc.Col(html.Div(id='kpi-summary'), width=6),
+            dbc.Col(dcc.Graph(id='workstream-progress-chart'), width=6)
+        ], className='mb-4'),
         dbc.Row([
-            dbc.Col(html.Div(id='tasks-table'),width=6),
-            dbc.Col(html.Div(id='team-members'),width=6)
+            dbc.Col(html.Div(id='tasks-table'), width=6),
+            dbc.Col(html.Div(id='team-members'), width=6)
         ])
-    ],fluid=True)
+    ], fluid=True)
 
 # Refresh callback
 @app.callback(
-    [Output('kpi-summary','children'), Output('workstream-progress-chart','figure'),
-     Output('tasks-table','children'), Output('team-members','children')],
+    [Output('kpi-summary','children'), Output('workstream-progress-chart','figure'), Output('tasks-table','children'), Output('team-members','children')],
     Input('interval-refresh','n_intervals')
 )
 def refresh_dashboard(n):
@@ -177,59 +188,70 @@ def refresh_dashboard(n):
         df_ws = get_as_dataframe(SPREADSHEET.worksheet("Workstreams")).dropna(how='all')
         df_issues = get_as_dataframe(SPREADSHEET.worksheet("Issue_Tracker")).dropna(how='all')
         df_refs = get_as_dataframe(SPREADSHEET.worksheet("References")).dropna(how='all')
-        df_r = pd.DataFrame(
-            SPREADSHEET.worksheet("Risk_Register").get_all_values()[1:],
-            columns=SPREADSHEET.worksheet("Risk_Register").get_all_values()[0]
-        )
+        raw_r = SPREADSHEET.worksheet("Risk_Register").get_all_values()
+        df_r = pd.DataFrame(raw_r[1:], columns=raw_r[0])
 
-        # Compute KPIs
-        num_tasks = df_ws.shape[0]
-        num_issues = df_issues[df_issues['Status'].str.lower().str.strip()=='open'].shape[0]
-        num_risks = df_r[df_r['Status'].str.lower().str.strip()=='open'].shape[0]
+        # Clean text columns
+        df_issues['Status']    = ensure_str(df_issues.get('Status')).str.lower().str.strip()
+        df_r['Status']         = ensure_str(df_r.get('Status')).str.lower().str.strip()
+        df_r['Risk Level']     = ensure_str(df_r.get('Risk Level')).str.lower().str.strip()
+
+        # Coerce numerics
+        df_ws['Actual % Complete']      = pd.to_numeric(df_ws.get('Actual % Complete'), errors='coerce').fillna(0)
+        df_ws['Duration (Effort Days)'] = pd.to_numeric(df_ws.get('Duration (Effort Days)'), errors='coerce').fillna(0)
+        df_r['Likelihood (1-5)']        = pd.to_numeric(df_r.get('Likelihood (1-5)'), errors='coerce').fillna(0)
+        df_r['Impact (1-5)']            = pd.to_numeric(df_r.get('Impact (1-5)'), errors='coerce').fillna(0)
+
+        # KPIs
+        num_tasks  = df_ws.shape[0]
+        num_issues = df_issues[df_issues['Status']=='open'].shape[0]
+        num_risks  = df_r[df_r['Status']=='open'].shape[0]
         kpi = dbc.Card([
             dbc.CardHeader("KPI Summary"),
             dbc.CardBody(dbc.Row([
-                dbc.Col(html.Div([html.H2(num_tasks),html.P("Tasks This Month")])),
-                dbc.Col(html.Div([html.H2(num_risks),html.P("Open Risks")])),
-                dbc.Col(html.Div([html.H2(num_issues),html.P("Open Issues")]))
+                dbc.Col(html.Div([html.H2(num_tasks), html.P("Tasks This Month")])),
+                dbc.Col(html.Div([html.H2(num_risks),  html.P("Open Risks")])),
+                dbc.Col(html.Div([html.H2(num_issues), html.P("Open Issues")]))
             ]))
-        ],className="shadow-sm mb-4")
+        ], className="shadow-sm mb-4")
 
         # Progress chart
-        df_ws['Start Date']=pd.to_datetime(df_ws['Start Date'],errors='coerce')
-        df_ws['End Date']=pd.to_datetime(df_ws['End Date'],errors='coerce')
-        df_ws['Actual % Complete']=pd.to_numeric(df_ws['Actual % Complete'],errors='coerce')
-        df_ws['Duration (Effort Days)']=pd.to_numeric(df_ws['Duration (Effort Days)'],errors='coerce').fillna(0)
-        today=pd.Timestamp.today()
-        def pct(row):
-            if pd.isna(row['Start Date'])or pd.isna(row['End Date']): return 0
-            dur=(row['End Date']-row['Start Date']).days
-            el=(today-row['Start Date']).days
-            return max(0,min(1,el/dur))*row['Duration (Effort Days)'] if dur>0 else 0
-        df_ws['Planned']=df_ws.apply(pct,axis=1)
-        df_ws['ActualW']=df_ws['Actual % Complete']*df_ws['Duration (Effort Days)']
-        summary=df_ws.groupby('Workstream').agg({'Duration (Effort Days)':'sum','Planned':'sum','ActualW':'sum'}).reset_index()
-        summary['Planned%']=summary['Planned']/summary['Duration (Effort Days)']*100
-        summary['Actual%']=summary['ActualW']/summary['Duration (Effort Days)']*100
-        fig=go.Figure()
-        for _,r in summary.iterrows():
-            fig.add_trace(go.Bar(name='Planned',x=[r['Workstream']],y=[r['Planned%']]))
-            fig.add_trace(go.Bar(name='Actual',x=[r['Workstream']],y=[r['Actual%']]))
-        fig.update_layout(barmode='group',height=300)
+        df_ws['Start Date'] = pd.to_datetime(df_ws.get('Start Date'), errors='coerce')
+        df_ws['End Date']   = pd.to_datetime(df_ws.get('End Date'),   errors='coerce')
+        today = pd.Timestamp.today()
+        def calc_planned(r):
+            if pd.isna(r['Start Date']) or pd.isna(r['End Date']):
+                return 0
+            dur = (r['End Date'] - r['Start Date']).days
+            el  = (today - r['Start Date']).days
+            return max(0, min(1, el/dur)) * r['Duration (Effort Days)'] if dur > 0 else 0
+        df_ws['Planned'] = df_ws.apply(calc_planned, axis=1)
+        df_ws['ActualW'] = df_ws['Actual % Complete'] * df_ws['Duration (Effort Days)']
+        summary = df_ws.groupby('Workstream').agg({'Duration (Effort Days)':'sum','Planned':'sum','ActualW':'sum'}).reset_index()
+        summary['Planned%'] = summary['Planned'] / summary['Duration (Effort Days)'] * 100
+        summary['Actual%']  = summary['ActualW'] / summary['Duration (Effort Days)'] * 100
+        fig = go.Figure()
+        for _, r in summary.iterrows():
+            fig.add_trace(go.Bar(name='Planned', x=[r['Workstream']], y=[r['Planned%']]))
+            fig.add_trace(go.Bar(name='Actual',  x=[r['Workstream']], y=[r['Actual%']]))
+        fig.update_layout(barmode='group', height=300)
 
         # Tasks and members
-        table=dbc.Table.from_dataframe(df_ws[['Task Name','Actual % Complete']],striped=True,bordered=True,hover=True)
-        assigned=df_ws['Assigned To'].dropna().str.split(',').explode().str.strip().str.lower()
-        df_refs['lower']=df_refs['Person Name'].str.strip().str.lower()
-        members=[member_card(r['Person Name'],r['Role']) for _,r in df_refs[df_refs['lower'].isin(assigned)].iterrows()]
+        table = dbc.Table.from_dataframe(df_ws[['Task Name','Actual % Complete']], striped=True, bordered=True, hover=True)
+        assigned = df_ws.get('Assigned To', pd.Series()).dropna().str.split(',').explode().str.strip().str.lower()
+        df_refs['lower'] = ensure_str(df_refs.get('Person Name')).str.lower().str.strip()
+        members = [member_card(r['Person Name'], r['Role']) for _, r in df_refs[df_refs['lower'].isin(assigned)].iterrows()]
 
-        return kpi,fig,table,members
+        return kpi, fig, table, members
     except Exception:
-        tb=traceback.format_exc()
-        err=dbc.Card([dbc.CardHeader("Error Loading Dashboard"),dbc.CardBody(html.Pre(tb),className='text-danger')],color="light",outline=True)
-        return err,go.Figure(),html.Pre(tb),[]
+        tb = traceback.format_exc()
+        err = dbc.Card([
+            dbc.CardHeader("Error Loading Dashboard"),
+            dbc.CardBody(html.Pre(tb), className='text-danger')
+        ], color="light", outline=True)
+        return err, go.Figure(), html.Pre(tb), []
 
 # Run server
 if __name__ == "__main__":
-    port=int(os.environ.get("PORT",8050))
-    app.run(host="0.0.0.0",port=port,debug=True)
+    port = int(os.environ.get("PORT", 8050))
+    app.run(host="0.0.0.0", port=port, debug=True)
