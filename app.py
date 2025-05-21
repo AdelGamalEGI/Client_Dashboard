@@ -7,22 +7,27 @@ import plotly.graph_objects as go
 import gspread
 from gspread_dataframe import get_as_dataframe
 from oauth2client.service_account import ServiceAccountCredentials
+import traceback
 
 # Initialize app
-app = dash.Dash(__name__, suppress_callback_exceptions=True, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app = dash.Dash(
+    __name__,
+    suppress_callback_exceptions=True,
+    external_stylesheets=[dbc.themes.BOOTSTRAP]
+)
 server = app.server
 
 # Helper to ensure string operations never fail
 def ensure_str(series: pd.Series) -> pd.Series:
     return series.fillna('').astype(str)
 
-# Initialize Google Sheets client once\ nSCOPES = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+# Initialize Google Sheets client once
 SCOPES = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 CREDS = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', SCOPES)
 GS_CLIENT = gspread.authorize(CREDS)
 SPREADSHEET = GS_CLIENT.open("Project_Planning_Workbook")
 
-# Photo map
+# Photo map for team member cards
 photo_mapping = {
     "lavjit singh": "lavjit.jpg",
     "adel gamal": "adel.jpg",
@@ -78,90 +83,80 @@ def display_page(pathname):
         return main_dashboard()
     elif pathname == "/risks":
         return risk_dashboard()
-    else:
-        return home_layout
+    return home_layout
 
-# --- Risk Dashboard (as per risk_dashboard_working.py) ---
+# --- Risk Dashboard ---
 def risk_dashboard():
-    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
-    client = gspread.authorize(creds)
-    sheet = client.open("Project_Planning_Workbook")
-    values = sheet.worksheet("Risk_Register").get_all_values()
-    headers = values[0]
-    rows = values[1:]
-    df_risks = pd.DataFrame(rows, columns=headers)
+    values = SPREADSHEET.worksheet("Risk_Register").get_all_values()
+    df = pd.DataFrame(values[1:], columns=values[0])
+    df['Status']     = ensure_str(df.get('Status')).str.lower().str.strip()
+    df['Risk Level'] = ensure_str(df.get('Risk Level')).str.lower().str.strip()
+    df['Likelihood (1-5)'] = pd.to_numeric(df.get('Likelihood (1-5)'), errors='coerce').fillna(0)
+    df['Impact (1-5)']     = pd.to_numeric(df.get('Impact (1-5)'), errors='coerce').fillna(0)
+    df['Risk Score']       = pd.to_numeric(df.get('Risk Score'), errors='coerce').fillna(0)
+    df = df[df['Status']=='open']
 
-    df_risks['Likelihood (1-5)'] = pd.to_numeric(df_risks['Likelihood (1-5)'], errors='coerce')
-    df_risks['Impact (1-5)']     = pd.to_numeric(df_risks['Impact (1-5)'], errors='coerce')
-    df_risks['Risk Score']       = pd.to_numeric(df_risks.get('Risk Score', 0), errors='coerce')
-    df_risks['Risk Level']       = ensure_str(df_risks.get('Risk Level')).str.strip().str.lower()
-    df_risks['Status']           = ensure_str(df_risks.get('Status')).str.strip().str.lower()
-
-    # Summary
-    score_counts = {
-        "High":   df_risks[df_risks['Risk Level']=='high'].shape[0],
-        "Medium": df_risks[df_risks['Risk Level']=='medium'].shape[0],
-        "Low":    df_risks[df_risks['Risk Level']=='low'].shape[0]
+    # Summary block
+    counts = {
+        'High': df[df['Risk Level']=='high'].shape[0],
+        'Medium': df[df['Risk Level']=='medium'].shape[0],
+        'Low': df[df['Risk Level']=='low'].shape[0]
     }
-    summary_block = dbc.Card([
+    summary = dbc.Card([
         dbc.CardHeader("Open Risks by Severity"),
         dbc.CardBody([
             html.Div([
-                html.Div([html.Span("🟥 High", style={"fontWeight":"bold","color":"red","marginRight":"10px"}), html.Span(f"{score_counts['High']} risks")], className="mb-2"),
-                html.Div([html.Span("🟧 Medium", style={"fontWeight":"bold","color":"orange","marginRight":"10px"}), html.Span(f"{score_counts['Medium']} risks")], className="mb-2"),
-                html.Div([html.Span("🟨 Low", style={"fontWeight":"bold","color":"gold","marginRight":"10px"}), html.Span(f"{score_counts['Low']} risks")])
+                html.Div([html.Span("🟥 High", style={"fontWeight":"bold","color":"red","marginRight":"10px"}), html.Span(f"{counts['High']} risks")], className="mb-2"),
+                html.Div([html.Span("🟧 Medium", style={"fontWeight":"bold","color":"orange","marginRight":"10px"}), html.Span(f"{counts['Medium']} risks")], className="mb-2"),
+                html.Div([html.Span("🟨 Low", style={"fontWeight":"bold","color":"gold","marginRight":"10px"}), html.Span(f"{counts['Low']} risks")])
             ])
         ], style={"minHeight": "300px"})
     ])
 
     # Fixed-size matrix
-    matrix_cells = {}
-    for _, row in df_risks.iterrows():
-        key = (int(row['Likelihood (1-5)']), int(row['Impact (1-5)']))
-        matrix_cells.setdefault(key, []).append(str(row['Risk ID']))
-
-    matrix_grid = []
-    for impact in range(5, 0, -1):
-        row_cells = []
-        for likelihood in range(1, 6):
-            risk_ids = matrix_cells.get((likelihood, impact), [])
-            score = impact * likelihood
-            color = 'red' if score >= 11 else 'orange' if score >= 6 else 'yellow'
-            row_cells.append(html.Td(
-                html.Div(", ".join(risk_ids), style={"fontSize": "0.65rem","whiteSpace": "normal","wordWrap": "break-word","overflow": "hidden"}),
-                style={"backgroundColor": color, "border": "1px solid #ccc", "width": "80px", "height": "80px", "textAlign": "center", "verticalAlign": "middle"}
-            ))
-        matrix_grid.append(html.Tr(row_cells))
-
-    matrix_table = dbc.Card([
+    cells = {}
+    for _, r in df.iterrows():
+        key = (int(r['Likelihood (1-5)']), int(r['Impact (1-5)']))
+        cells.setdefault(key, []).append(str(r['Risk ID']))
+    rows = []
+    for imp in range(5,0,-1):
+        tds = []
+        for lik in range(1,6):
+            ids = cells.get((lik,imp), [])
+            score = lik*imp
+            color = 'red' if score>=11 else 'orange' if score>=6 else 'yellow'
+            tds.append(html.Td(html.Div(
+                ", ".join(ids), style={"fontSize":"0.65rem","whiteSpace":"normal","wordWrap":"break-word"}
+            ), style={"backgroundColor":color,"border":"1px solid #ccc","width":"80px","height":"80px","textAlign":"center","verticalAlign":"middle"}))
+        rows.append(html.Tr(tds))
+    matrix = dbc.Card([
         dbc.CardHeader("Risk Matrix (Likelihood × Impact)"),
-        dbc.CardBody(html.Table(matrix_grid, style={"width": "100%", "borderCollapse": "collapse"}))
+        dbc.CardBody(html.Table(rows, style={"borderCollapse":"collapse"}))
     ], className="mb-4")
 
     # Risk table
-    table_columns = ["Risk ID", "Risk Description", "Likelihood (1-5)", "Impact (1-5)", "Risk Level", "Status"]
-    risk_table = dash_table.DataTable(
-        columns=[{"name": col, "id": col} for col in table_columns],
-        data=df_risks[table_columns].to_dict('records'),
-        style_table={"maxHeight": "300px", "overflowY": "auto"},
-        style_cell={"textAlign": "left", "padding": "5px"},
-        style_header={"backgroundColor": "rgb(230, 230, 230)", "fontWeight": "bold"}
+    cols = ["Risk ID","Risk Description","Likelihood (1-5)","Impact (1-5)","Risk Level","Status"]
+    table = dash_table.DataTable(
+        columns=[{"name":c,"id":c} for c in cols],
+        data=df[cols].to_dict('records'),
+        style_table={"maxHeight":"300px","overflowY":"auto"},
+        style_cell={"textAlign":"left","padding":"5px"},
+        style_header={"backgroundColor":"#E6E6E6","fontWeight":"bold"}
     )
 
     return dbc.Container([
         html.H2("Risk Dashboard", className="text-center my-4"),
-        dbc.Row([dbc.Col(summary_block, width=6), dbc.Col(matrix_table, width=6)], className="mb-4"),
-        dbc.Row(dbc.Col([html.H5("Open Risks Table", className="mb-3"), risk_table]))
+        dbc.Row([dbc.Col(summary, width=6), dbc.Col(matrix, width=6)], className="mb-4"),
+        dbc.Row(dbc.Col([html.H5("Open Risks Table", className="mb-3"), table]))
     ], fluid=True)
 
-# --- Main Dashboard (as per mian_dashboard_working.py) ---
+# --- Main Dashboard ---
 def main_dashboard():
     return dbc.Container([
         html.H2('Client Dashboard', className='text-center my-4'),
         dcc.Interval(id='interval-refresh', interval=60*1000, n_intervals=0),
         dbc.Row([
-            dbc.Col(html.Div(dbc.Card(id='kpi-summary', className='shadow-sm'), style={"height": "300px", "overflowY": "auto"}), width=6),
+            dbc.Col(html.Div(dbc.Card(id='kpi-summary', className='shadow-sm'), style={"height":"300px","overflowY":"auto"}), width=6),
             dbc.Col(dbc.Card([
                 dbc.CardHeader('Workstream Progress'),
                 dbc.CardBody([dcc.Graph(id='workstream-progress-chart')])
@@ -170,93 +165,52 @@ def main_dashboard():
         dbc.Row([
             dbc.Col(dbc.Card([
                 dbc.CardHeader('Tasks This Month'),
-                dbc.CardBody(html.Div(dbc.Table(id='tasks-table'), style={"maxHeight": "300px", "overflowY": "auto"}))
+                dbc.CardBody(html.Div(dbc.Table(id='tasks-table'), style={"maxHeight":"300px","overflowY":"auto"}))
             ], className="shadow-sm"), width=6),
             dbc.Col(dbc.Card([
                 dbc.CardHeader('Active Team Members'),
-                dbc.CardBody(html.Div(id='team-members', style={"maxHeight": "300px", "overflowY": "auto"}))
+                dbc.CardBody(html.Div(id='team-members', style={"maxHeight":"300px","overflowY":"auto"}))
             ], className="shadow-sm"), width=6),
         ])
     ], fluid=True)
 
 # Refresh callback
 @app.callback(
-    Output('kpi-summary', 'children'),
-    Output('workstream-progress-chart', 'figure'),
-    Output('tasks-table', 'children'),
-    Output('team-members', 'children'),
-    Input('interval-refresh', 'n_intervals')
+    Output('kpi-summary','children'),
+    Output('workstream-progress-chart','figure'),
+    Output('tasks-table','children'),
+    Output('team-members','children'),
+    Input('interval-refresh','n_intervals')
 )
 def refresh_dashboard(n):
-    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
-    client = gspread.authorize(creds)
-    spreadsheet = client.open("Project_Planning_Workbook")
-    df_workstreams = get_as_dataframe(spreadsheet.worksheet("Workstreams")).dropna(how='all')
-    df_issues = get_as_dataframe(spreadsheet.worksheet("Issue_Tracker")).dropna(how='all')
-    values = spreadsheet.worksheet("Risk_Register").get_all_values()
-    headers = values[0]
-    rows = values[1:]
-    df_risks = pd.DataFrame(rows, columns=headers)
-    df_team = get_as_dataframe(spreadsheet.worksheet("References")).dropna(how='all')
+    try:
+        df_ws = get_as_dataframe(SPREADSHEET.worksheet("Workstreams")).dropna(how='all')
+        df_issues = get_as_dataframe(SPREADSHEET.worksheet("Issue_Tracker")).dropna(how='all')
+        df_refs = get_as_dataframe(SPREADSHEET.worksheet("References")).dropna(how='all')
+        raw_r = SPREADSHEET.worksheet("Risk_Register").get_all_values()
+        df_r = pd.DataFrame(raw_r[1:], columns=raw_r[0])
 
-    df_workstreams['Start Date'] = pd.to_datetime(df_workstreams['Start Date'], errors='coerce')
-    df_workstreams['End Date'] = pd.to_datetime(df_workstreams['End Date'], errors='coerce')
-    df_workstreams['Actual % Complete'] = pd.to_numeric(df_workstreams['Actual % Complete'], errors='coerce')
-    df_workstreams['Duration (Effort Days)'] = pd.to_numeric(df_workstreams['Duration (Effort Days)'], errors='coerce').fillna(0)
+        # Clean text and numeric columns
+        df_issues['Status'] = ensure_str(df_issues['Status']).str.lower().str.strip()
+        df_r['Status']      = ensure_str(df_r['Status']).str.lower().str.strip()
+        df_r['Risk Level']  = ensure_str(df_r['Risk Level']).str.lower().str.strip()
+        df_ws['Actual % Complete']      = pd.to_numeric(df_ws['Actual % Complete'], errors='coerce').fillna(0)
+        df_ws['Duration (Effort Days)'] = pd.to_numeric(df_ws['Duration (Effort Days)'], errors='coerce').fillna(0)
+        df_r['Likelihood (1-5)']        = pd.to_numeric(df_r['Likelihood (1-5)'], errors='coerce').fillna(0)
+        df_r['Impact (1-5)']            = pd.to_numeric(df_r['Impact (1-5)'], errors='coerce').fillna(0)
 
-    today = pd.Timestamp.today()
-    start_month = today.replace(day=1)
-    end_month = start_month + pd.offsets.MonthEnd(1)
+        # KPIs
+        num_tasks  = df_ws.shape[0]
+        num_issues = df_issues[df_issues['Status']=='open'].shape[0]
+        num_risks  = df_r[df_r['Status']=='open'].shape[0]
+        kpi = dbc.Card([
+            dbc.CardHeader("KPI Summary"),
+            dbc.CardBody(dbc.Row([
+                dbc.Col(html.Div([html.H2(num_tasks), html.P("Tasks This Month")])),
+                dbc.Col(html.Div([html.H2(num_risks),  html.P("Open Risks")])),
+                dbc.Col(html.Div([html.H2(num_issues), html.P("Open Issues")]))
+            ]))
+        ], className="shadow-sm mb-4")
 
-    def compute_planned_percent(row):
-        if pd.isna(row['Start Date']) or pd.isna(row['End Date']):
-            return 0
-        duration = (row['End Date'] - row['Start Date']).days
-        elapsed = (today - row['Start Date']).days
-        return max(0, min(1, elapsed / duration)) * row['Duration (Effort Days)'] if duration > 0 else 0
-
-    df_workstreams['Planned Weighted'] = df_workstreams.apply(compute_planned_percent, axis=1)
-    df_workstreams['Actual Weighted'] = df_workstreams['Actual % Complete'] * df_workstreams['Duration (Effort Days)']
-
-    ws_summary = df_workstreams.groupby('Workstream').agg({
-        'Duration (Effort Days)': 'sum',
-        'Planned Weighted': 'sum',
-        'Actual Weighted': 'sum'
-    }).reset_index()
-    ws_summary['Planned %'] = (ws_summary['Planned Weighted'] / ws_summary['Duration (Effort Days)']).fillna(0) * 100
-    ws_summary['Actual %'] = (ws_summary['Actual Weighted'] / ws_summary['Duration (Effort Days)']).fillna(0)
-
-    tasks_this_month = df_workstreams[(df_workstreams['Start Date'] <= end_month) & (df_workstreams['End Date'] >= start_month)]
-    num_tasks = tasks_this_month.shape[0]
-    num_open_issues = df_issues[df_issues['Status'].astype(str).str.lower().str.strip() == 'open'].shape[0]
-    open_risks = df_risks[df_risks['Status'].astype(str).str.lower().str.strip() == 'open']
-    num_open_risks = open_risks.shape[0]
-
-    risk_levels = open_risks['Risk Level'].astype(str).str.lower().str.strip()
-    if 'high' in risk_levels.values:
-        risk_color = 'danger'
-    elif 'medium' in risk_levels.values:
-        risk_color = 'warning'
-    else:
-        risk_color = 'warning' if num_open_risks > 0 else 'secondary'
-
-    kpi_card = [
-        dbc.CardHeader("KPI Summary"),
-        dbc.CardBody([
-            dbc.Row([
-                dbc.Col(html.Div([
-                    html.H2(f"{num_tasks}", className="text-primary mb-0", style={"fontWeight": "bold", "fontSize": "2rem", "textAlign": "center"}),
-                    html.P("Tasks This Month", className="text-muted", style={"textAlign": "center"})
-                ])),
-                dbc.Col(html.Div([
-                    html.H2([dcc.Link(dbc.Badge(f"{num_open_risks}", color=risk_color, className="px-3 py-2", pill=True), href="/risks", style={"textDecoration": "none"})],
-                            className="mb-0", style={"textAlign": "center"}),
-                    html.P("Open Risks", className="text-muted", style={"textAlign": "center"})
-                ])),
-                dbc.Col(html.Div([
-                    html.H2(f"{num_open_issues}", className="text-primary mb-0", style={"fontWeight": "bold", "fontSize": "2rem", "textAlign": "center"}),
-                    html.P("Open Issues", className="text-muted", style={"textAlign": "center"})
-                ])),
-            ], justify="center")
-        ], style={"maxHeight": "300px
+        # Workstream progress chart
+        df_ws['Start Date'] = pd.to_datetime(df_ws['Start Date'], errors='coerce')
