@@ -8,6 +8,28 @@ import gspread
 from gspread_dataframe import get_as_dataframe
 from oauth2client.service_account import ServiceAccountCredentials
 import os
+def main_dashboard():
+    return dbc.Container([
+        html.H2('Client Dashboard', className='text-center my-4'),
+        dcc.Interval(id='interval-refresh', interval=60*1000, n_intervals=0),
+        dbc.Row([
+            dbc.Col(html.Div(dbc.Card(id='kpi-summary', className='shadow-sm'), style={"height": "300px", "overflowY": "auto"}), width=6),
+            dbc.Col(dbc.Card([dbc.CardHeader('Workstream Progress'), dbc.CardBody([dcc.Graph(id='workstream-progress-chart')])], className="shadow-sm"), width=6),
+        ], className='mb-4'),
+        dbc.Row([
+            dbc.Col(dbc.Card([dbc.CardHeader('Tasks This Month'), dbc.CardBody([html.Div(dbc.Table(id='tasks-table'), style={"maxHeight": "300px", "overflowY": "auto"})])], className="shadow-sm"), width=6),
+            dbc.Col(dbc.Card([dbc.CardHeader('Active Team Members'), dbc.CardBody(html.Div(id='team-members', style={"maxHeight": "300px", "overflowY": "auto"}))], className="shadow-sm"), width=6),
+        ])
+    ], fluid=True)
+
+def risk_dashboard():
+    # GSheet load
+    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+    creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
+    client = gspread.authorize(creds)
+    sheet = client.open("Project_Planning_Workbook")
+    df_risks = get_as_dataframe(sheet.worksheet("Risk_Register")).dropna(how="all")
+
 
 # Initialize app
 app = dash.Dash(__name__, suppress_callback_exceptions=True, external_stylesheets=[dbc.themes.BOOTSTRAP])
@@ -61,132 +83,13 @@ app.layout = html.Div([
 
 # Routing callback
 @app.callback(Output("page-content", "children"), Input("url", "pathname"))
+@app.callback(Output("page-content", "children"), Input("url", "pathname"))
 def display_page(pathname):
-    if pathname == "/dashboard":
-        return main_dashboard()
-    elif pathname == "/risks":
-        return risk_dashboard()
-
-def risk_dashboard():
-    # GSheet load
-    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
-    client = gspread.authorize(creds)
-    sheet = client.open("Project_Planning_Workbook")
-    df_risks = get_as_dataframe(sheet.worksheet("Risk_Register")).dropna(how="all")
-
-    df_risks['Likelihood (1-5)'] = pd.to_numeric(df_risks['Likelihood (1-5)'], errors='coerce')
-    df_risks['Impact (1-5)'] = pd.to_numeric(df_risks['Impact (1-5)'], errors='coerce')
-    df_risks['Risk Score'] = pd.to_numeric(df_risks['Risk Score'], errors='coerce')
-    df_risks = df_risks[df_risks['Status'].astype(str).str.lower().str.strip() == 'open']
-
-    # --- New Summary Block (Top Left) ---
-    score_counts = {
-        "High": df_risks[(df_risks['Risk Score'] >= 10)].shape[0],
-        "Medium": df_risks[(df_risks['Risk Score'] >= 5) & (df_risks['Risk Score'] < 10)].shape[0],
-        "Low": df_risks[(df_risks['Risk Score'] >= 1) & (df_risks['Risk Score'] < 5)].shape[0],
+    page_map = {
+        "/dashboard": main_dashboard,
+        "/risks": risk_dashboard
     }
-
-    summary_block = dbc.Card([
-        dbc.CardHeader("Open Risks by Severity"),
-        dbc.CardBody([
-            html.Div([
-                html.Div([
-                    html.Span("🟥 High", style={"fontWeight": "bold", "color": "red", "marginRight": "10px"}),
-                    html.Span(f"{score_counts['High']} risks")
-                ], className="mb-2"),
-                html.Div([
-                    html.Span("🟧 Medium", style={"fontWeight": "bold", "color": "orange", "marginRight": "10px"}),
-                    html.Span(f"{score_counts['Medium']} risks")
-                ], className="mb-2"),
-                html.Div([
-                    html.Span("🟨 Low", style={"fontWeight": "bold", "color": "gold", "marginRight": "10px"}),
-                    html.Span(f"{score_counts['Low']} risks")
-                ])
-            ])
-        ], style={"minHeight": "300px"})
-    ])
-
-    # --- New Risk Matrix ---
-    matrix_df = df_risks[['Risk ID', 'Likelihood (1-5)', 'Impact (1-5)', 'Risk Score']].dropna()
-    matrix_cells = {}
-    for _, row in matrix_df.iterrows():
-        key = (int(row['Likelihood (1-5)']), int(row['Impact (1-5)']))
-        matrix_cells.setdefault(key, []).append(str(row['Risk ID']))
-
-    matrix_grid = []
-    for impact in range(5, 0, -1):
-        row = []
-        for likelihood in range(1, 6):
-            risk_ids = matrix_cells.get((likelihood, impact), [])
-            score = impact * likelihood
-            if score >= 10:
-                color = "red"
-            elif score >= 5:
-                color = "orange"
-            else:
-                color = "yellow"
-            cell_content = html.Div(", ".join(risk_ids), style={"fontSize": "0.75rem"})
-            row.append(html.Td(cell_content, style={"backgroundColor": color, "border": "1px solid #ccc", "padding": "12px", "minWidth": "90px"}))
-        matrix_grid.append(html.Tr(row))
-
-    matrix_table = dbc.Card([
-        dbc.CardHeader("Risk Matrix (Likelihood × Impact)"),
-        dbc.CardBody([
-            html.Table(matrix_grid, style={"width": "100%", "borderCollapse": "collapse"})
-        ])
-    ])
-
-    # --- Risk Table (Bottom) ---
-    table_columns = ["Risk ID", "Risk Description", "Likelihood (1-5)", "Impact (1-5)", "Risk Score", "Status"]
-    risk_table = dash_table.DataTable(
-        columns=[{"name": i, "id": i} for i in table_columns],
-        data=df_risks[table_columns].to_dict('records'),
-        style_table={"maxHeight": "300px", "overflowY": "auto"},
-        style_cell={"textAlign": "left", "padding": "5px"},
-        style_header={"backgroundColor": "rgb(230, 230, 230)", "fontWeight": "bold"}
-    )
-
-    return dbc.Container([
-        html.H2("Risk Dashboard", className="text-center my-4"),
-        dbc.Row([
-            dbc.Col(summary_block, width=6),
-            dbc.Col(matrix_table, width=6)
-        ], className="mb-4"),
-        dbc.Row([
-            dbc.Col([
-                html.H5("Open Risks Table", className="mb-3"),
-                risk_table
-            ])
-        ])
-    ], fluid=True)
-
-# Run
-
-    return home_layout
-
-# --------------------- Main Dashboard ---------------------
-def main_dashboard():
-    return dbc.Container([
-        html.H2('Client Dashboard', className='text-center my-4'),
-        dcc.Interval(id='interval-refresh', interval=60*1000, n_intervals=0),
-        dbc.Row([
-            dbc.Col(html.Div(dbc.Card(id='kpi-summary', className='shadow-sm'), style={"height": "300px", "overflowY": "auto"}), width=6),
-            dbc.Col(dbc.Card([dbc.CardHeader('Workstream Progress'), dbc.CardBody([dcc.Graph(id='workstream-progress-chart')])], className="shadow-sm"), width=6),
-        ], className='mb-4'),
-        dbc.Row([
-            dbc.Col(dbc.Card([dbc.CardHeader('Tasks This Month'), dbc.CardBody([html.Div(dbc.Table(id='tasks-table'), style={"maxHeight": "300px", "overflowY": "auto"})])], className="shadow-sm"), width=6),
-            dbc.Col(dbc.Card([dbc.CardHeader('Active Team Members'), dbc.CardBody(html.Div(id='team-members', style={"maxHeight": "300px", "overflowY": "auto"}))], className="shadow-sm"), width=6),
-        ])
-    ], fluid=True)
-
-@app.callback(
-    Output('kpi-summary', 'children'),
-    Output('workstream-progress-chart', 'figure'),
-    Output('tasks-table', 'children'),
-    Output('team-members', 'children'),
-    Input('interval-refresh', 'n_intervals')
-)
+    return page_map.get(pathname, home_layout)()
 def refresh_dashboard(n):
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
     creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
