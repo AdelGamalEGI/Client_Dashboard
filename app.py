@@ -50,9 +50,9 @@ def risk_dashboard():
 
     # --- New Summary Block (Top Left) ---
     score_counts = {
-        "High": df_risks[(df_risks['Risk Score'] >= 10)].shape[0],
-        "Medium": df_risks[(df_risks['Risk Score'] >= 5) & (df_risks['Risk Score'] < 10)].shape[0],
-        "Low": df_risks[(df_risks['Risk Score'] >= 1) & (df_risks['Risk Score'] < 5)].shape[0],
+        "High": df_risks[(df_risks['Risk Score'] >= 11)].shape[0],
+        "Medium": df_risks[(df_risks['Risk Score'] >= 6) & (df_risks['Risk Score'] < 11)].shape[0],
+        "Low": df_risks[(df_risks['Risk Score'] >= 1) & (df_risks['Risk Score'] < 6)].shape[0],
     }
 
     summary_block = dbc.Card([
@@ -88,9 +88,9 @@ def risk_dashboard():
         for likelihood in range(1, 6):
             risk_ids = matrix_cells.get((likelihood, impact), [])
             score = impact * likelihood
-            if score >= 10:
+            if score >= 11:
                 color = "red"
-            elif score >= 5:
+            elif score >= 6:
                 color = "orange"
             else:
                 color = "yellow"
