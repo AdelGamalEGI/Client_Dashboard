@@ -265,10 +265,15 @@ def refresh_dashboard(n):
     fig = go.Figure()
     for _, row in ws_summary.iterrows():
         delta = abs(row['Planned %'] - row['Actual %'])
-        color = 'green' if delta <= 15 else 'orange' if delta <= 30 else 'red'
-        fig.add_trace(go.Bar(name='Planned', x=[row['Planned %']], y=[row['Workstream']], orientation='h', marker_color='blue'))
-        fig.add_trace(go.Bar(name='Actual', x=[row['Actual %']], y=[row['Workstream']], orientation='h', marker_color=color))
-    fig.update_layout(barmode='overlay', title='Workstream Progress', height=300)
+        if delta <= 5:
+            color = 'green'
+        elif delta <= 10:
+            color = 'orange'
+        else:
+            color = 'red'
+        fig.add_trace(go.Bar(name='Planned', x=[row['Workstream']], y=[row['Planned %']], marker_color='blue'))
+        fig.add_trace(go.Bar(name='Actual', x=[row['Workstream']], y=[row['Actual %']], marker_color=color))
+    fig.update_layout(barmode='group', title='Workstream Progress', height=300)
 
     table = dbc.Table.from_dataframe(tasks_this_month[['Task Name', 'Actual % Complete']], striped=True, bordered=True, hover=True)
     assigned_people = tasks_this_month['Assigned To'].dropna().astype(str).str.split(',').explode().str.strip().str.lower()
