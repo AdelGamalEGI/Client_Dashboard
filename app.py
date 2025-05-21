@@ -1,33 +1,47 @@
-# app.py (wrapper for standalone dashboards)
 import dash
 from dash import dcc, html, Input, Output
 import dash_bootstrap_components as dbc
 
 # Import your two stable modules
-# Make sure these files are in the same directory:
-#   - mian_dashboard_working.py (defines main_dashboard() & refresh_dashboard)
-#   - risk_dashboard_working.py (defines risk_dashboard())
+to_import = [
+    "mian_dashboard_working",
+    "risk_dashboard_working"
+]
 from mian_dashboard_working import main_dashboard, refresh_dashboard as main_refresh
 from risk_dashboard_working import risk_dashboard
 
-# Initialize Dash\ napp = dash.Dash(__name__, suppress_callback_exceptions=True, external_stylesheets=[dbc.themes.BOOTSTRAP])
+# Initialize Dash
+app = dash.Dash(
+    __name__,
+    suppress_callback_exceptions=True,
+    external_stylesheets=[dbc.themes.BOOTSTRAP]
+)
 server = app.server
 
-# Home layout (simple navigation)
+# Home layout
 home_layout = html.Div([
     html.H1("Welcome to AIS Portal", className="text-center my-4"),
     dbc.Row([
-        dbc.Col(dcc.Link(dbc.Button("📊 Go to Dashboard", color="primary"), href="/dashboard"), width=6),
-        dbc.Col(dcc.Link(dbc.Button("🛡️ Go to Risk View", color="danger"), href="/risks"), width=6),
+        dbc.Col(
+            dcc.Link(dbc.Button("📊 Go to Dashboard", color="primary"), href="/dashboard"),
+            width=6
+        ),
+        dbc.Col(
+            dcc.Link(dbc.Button("🛡️ Go to Risk View", color="danger"), href="/risks"),
+            width=6
+        ),
     ], justify="center", className="my-4")
 ])
 
-# App layout with multi-page routing\ napp.layout = html.Div([
+# App layout
+title_div = html.Div(id="page-content")
+app.layout = html.Div([
     dcc.Location(id="url", refresh=False),
-    html.Div(id="page-content")
+    title_div
 ])
 
-# Page router\ n@app.callback(
+# Routing callback
+@app.callback(
     Output("page-content", "children"),
     Input("url", "pathname")
 )
@@ -36,10 +50,10 @@ def display_page(pathname):
         return main_dashboard()
     elif pathname == "/risks":
         return risk_dashboard()
-    else:
-        return home_layout
+    return home_layout
 
-# Rebind the existing refresh callback from your main dashboard script\ napp.callback(
+# Rebind the existing refresh callback
+app.callback(
     Output('kpi-summary', 'children'),
     Output('workstream-progress-chart', 'figure'),
     Output('tasks-table', 'children'),
@@ -47,6 +61,6 @@ def display_page(pathname):
     Input('interval-refresh', 'n_intervals')
 )(main_refresh)
 
-# Run the server
+# Run server
 if __name__ == "__main__":
     app.run_server(debug=True)
