@@ -26,16 +26,25 @@ def risk_dashboard():
     # GSheet load
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
     creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
-    client = gspread.authorize(creds)
-    sheet = client.open("Project_Planning_Workbook")
-    df_risks = get_as_dataframe(sheet.worksheet("Risk_Register")).dropna(how="all")
 
-
-# Initialize app
-
-# Centralized Google Sheet loading
+# Centralized Google Sheet loading (resilient to header issues)
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
+client = gspread.authorize(creds)
+sheet = client.open("Project_Planning_Workbook")
+
+# Load all sheets using get_all_values to avoid header errors
+ws_values = sheet.worksheet("Workstreams").get_all_values()
+df_workstreams = pd.DataFrame(ws_values[1:], columns=ws_values[0])
+
+issue_values = sheet.worksheet("Issue_Tracker").get_all_values()
+df_issues = pd.DataFrame(issue_values[1:], columns=issue_values[0])
+
+risk_values = sheet.worksheet("Risk_Register").get_all_values()
+df_risks = pd.DataFrame(risk_values[1:], columns=risk_values[0])
+
+ref_values = sheet.worksheet("References").get_all_values()
+df_team = pd.DataFrame(ref_values[1:], columns=ref_values[0])
 client = gspread.authorize(creds)
 sheet = client.open("Project_Planning_Workbook")
 df_workstreams = pd.DataFrame(sheet.worksheet("Workstreams").get_all_records())
