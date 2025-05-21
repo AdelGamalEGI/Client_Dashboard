@@ -21,13 +21,13 @@ server = app.server
 def ensure_str(series: pd.Series) -> pd.Series:
     return series.fillna('').astype(str)
 
-# Initialize Google Sheets client once\ nSCOPES = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+# Initialize Google Sheets client once
 SCOPES = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 CREDS = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', SCOPES)
 GS_CLIENT = gspread.authorize(CREDS)
 SPREADSHEET = GS_CLIENT.open("Project_Planning_Workbook")
 
-# Photo map
+# Photo map for team member cards
 photo_mapping = {
     "lavjit singh": "lavjit.jpg",
     "adel gamal": "adel.jpg",
@@ -73,7 +73,7 @@ app.layout = html.Div([
     html.Div(id="page-content")
 ])
 
-# Routing: single callback
+# Routing callback (single)
 @app.callback(
     Output("page-content", "children"),
     Input("url", "pathname")
@@ -85,72 +85,65 @@ def display_page(pathname):
         return risk_dashboard()
     return home_layout
 
-# Risk Dashboard
+# --- Risk Dashboard ---
 def risk_dashboard():
-    # Load raw values
-    values = SPREADSHEET.worksheet("Risk_Register").get_all_values()
-    df = pd.DataFrame(values[1:], columns=values[0])
-
-    # Clean and coerce
-    df['Status'] = ensure_str(df.get('Status')).str.lower().str.strip()
-    df['Risk Level'] = ensure_str(df.get('Risk Level')).str.lower().str.strip()
-    df['Likelihood (1-5)'] = pd.to_numeric(df.get('Likelihood (1-5)'), errors='coerce').fillna(0)
-    df['Impact (1-5)'] = pd.to_numeric(df.get('Impact (1-5)'), errors='coerce').fillna(0)
-    df['Risk Score'] = pd.to_numeric(df.get('Risk Score'), errors='coerce').fillna(0)
-
-    # Only open risks
+    # Load and clean data
+    raw = SPREADSHEET.worksheet("Risk_Register").get_all_values()
+    df = pd.DataFrame(raw[1:], columns=raw[0])
+    df['Status']     = ensure_str(df['Status']).str.lower().str.strip()
+    df['Risk Level'] = ensure_str(df['Risk Level']).str.lower().str.strip()
+    df['Likelihood (1-5)'] = pd.to_numeric(df['Likelihood (1-5)'], errors='coerce').fillna(0)
+    df['Impact (1-5)']     = pd.to_numeric(df['Impact (1-5)'], errors='coerce').fillna(0)
+    df['Risk Score']       = pd.to_numeric(df['Risk Score'], errors='coerce').fillna(0)
     df = df[df['Status'] == 'open']
 
-    # Summary
+    # Summary card
     counts = {
-        'High': df[df['Risk Level']=='high'].shape[0],
+        'High':   df[df['Risk Level']=='high'].shape[0],
         'Medium': df[df['Risk Level']=='medium'].shape[0],
-        'Low': df[df['Risk Level']=='low'].shape[0]
+        'Low':    df[df['Risk Level']=='low'].shape[0]
     }
     summary = dbc.Card([
         dbc.CardHeader("Open Risks by Severity"),
         dbc.CardBody([
             html.Div([
-                html.Div([html.Span("🟥 High", style={"fontWeight":"bold","color":"red","marginRight":"10px"}), html.Span(f"{counts['High']} risks")], className="mb-2"),
-                html.Div([html.Span("🟧 Medium", style={"fontWeight":"bold","color":"orange","marginRight":"10px"}), html.Span(f"{counts['Medium']} risks")], className="mb-2"),
-                html.Div([html.Span("🟨 Low", style={"fontWeight":"bold","color":"gold","marginRight":"10px"}), html.Span(f"{counts['Low']} risks")])
+                html.Div([html.Span("🟥 High", style={"fontWeight":"bold","color":"red","marginRight":"10px"}),
+                          html.Span(f"{counts['High']} risks")], className="mb-2"),
+                html.Div([html.Span("🟧 Medium", style={"fontWeight":"bold","color":"orange","marginRight":"10px"}),
+                          html.Span(f"{counts['Medium']} risks")], className="mb-2"),
+                html.Div([html.Span("🟨 Low", style={"fontWeight":"bold","color":"gold","marginRight":"10px"}),
+                          html.Span(f"{counts['Low']} risks")])
             ])
         ])
     ], className="mb-4")
 
-    # Fixed-size Risk Matrix
+    # Fixed 5×5 risk matrix
     cells = {}
-    for _, r in df.iterrows():
-        key = (int(r['Likelihood (1-5)']), int(r['Impact (1-5)']))
-        cells.setdefault(key, []).append(str(r['Risk ID']))
-    grid = []
+    for _, row in df.iterrows():
+        key = (int(row['Likelihood (1-5)']), int(row['Impact (1-5)']))
+        cells.setdefault(key, []).append(str(row['Risk ID']))
+    matrix_rows = []
     for imp in range(5, 0, -1):
-        row = []
+        tds = []
         for lik in range(1, 6):
             ids = cells.get((lik, imp), [])
             score = lik * imp
             color = 'red' if score >= 11 else 'orange' if score >= 6 else 'yellow'
-            row.append(html.Td(
-                html.Div(", ".join(ids), style={"fontSize":"0.65rem","whiteSpace":"normal","wordWrap":"break-word","overflow":"hidden"}),
-                style={
-                    "backgroundColor": color,
-                    "border": "1px solid #ccc",
-                    "width": "80px",
-                    "height": "80px",
-                    "textAlign": "center",
-                    "verticalAlign": "middle"
-                }
+            tds.append(html.Td(
+                html.Div(", ".join(ids), style={"fontSize":"0.65rem","whiteSpace":"normal","wordWrap":"break-word"}),
+                style={"backgroundColor":color, "border":"1px solid #ccc", "width":"80px", "height":"80px", "textAlign":"center", "verticalAlign":"middle"}
             ))
-        grid.append(html.Tr(row))
+        matrix_rows.append(html.Tr(tds))
     matrix = dbc.Card([
         dbc.CardHeader("Risk Matrix (Likelihood × Impact)"),
-        dbc.CardBody(html.Table(grid, style={"borderCollapse":"collapse"}))
+        dbc.CardBody(html.Table(matrix_rows, style={"borderCollapse":"collapse"}))
     ], className="mb-4")
 
-    # Risk table
-    table = dash_table.DataTable(
-        columns=[{"name":c,"id":c} for c in ["Risk ID","Risk Description","Likelihood (1-5)","Impact (1-5)","Risk Level","Status"]],
-        data=df.to_dict('records'),
+    # Detailed risk table
+    columns = ["Risk ID","Risk Description","Likelihood (1-5)","Impact (1-5)","Risk Level","Status"]
+    risk_table = dash_table.DataTable(
+        columns=[{"name":col,"id":col} for col in columns],
+        data=df[columns].to_dict('records'),
         style_table={"maxHeight":"300px","overflowY":"auto"},
         style_cell={"textAlign":"left","padding":"5px"},
         style_header={"backgroundColor":"#E6E6E6","fontWeight":"bold"}
@@ -159,10 +152,10 @@ def risk_dashboard():
     return dbc.Container([
         html.H2("Risk Dashboard", className="text-center my-4"),
         dbc.Row([dbc.Col(summary, width=6), dbc.Col(matrix, width=6)], className="mb-4"),
-        dbc.Row(dbc.Col([html.H5("Open Risks Table", className="mb-2"), table]))
+        dbc.Row(dbc.Col([html.H5("Open Risks Table", className="mb-2"), risk_table]))
     ], fluid=True)
 
-# Main Dashboard
+# --- Main Dashboard ---
 def main_dashboard():
     return dbc.Container([
         html.H2('Client Dashboard', className='text-center my-4'),
@@ -177,9 +170,10 @@ def main_dashboard():
         ])
     ], fluid=True)
 
-# Refresh callback
+# Refresh callback with defensive cleaning
 @app.callback(
-    [Output('kpi-summary','children'), Output('workstream-progress-chart','figure'), Output('tasks-table','children'), Output('team-members','children')],
+    [Output('kpi-summary','children'), Output('workstream-progress-chart','figure'),
+     Output('tasks-table','children'), Output('team-members','children')],
     Input('interval-refresh','n_intervals')
 )
 def refresh_dashboard(n):
@@ -192,15 +186,15 @@ def refresh_dashboard(n):
         df_r = pd.DataFrame(raw_r[1:], columns=raw_r[0])
 
         # Clean text columns
-        df_issues['Status']    = ensure_str(df_issues.get('Status')).str.lower().str.strip()
-        df_r['Status']         = ensure_str(df_r.get('Status')).str.lower().str.strip()
-        df_r['Risk Level']     = ensure_str(df_r.get('Risk Level')).str.lower().str.strip()
+        df_issues['Status']    = ensure_str(df_issues['Status']).str.lower().str.strip()
+        df_r['Status']         = ensure_str(df_r['Status']).str.lower().str.strip()
+        df_r['Risk Level']     = ensure_str(df_r['Risk Level']).str.lower().str.strip()
 
-        # Coerce numerics
-        df_ws['Actual % Complete']      = pd.to_numeric(df_ws.get('Actual % Complete'), errors='coerce').fillna(0)
-        df_ws['Duration (Effort Days)'] = pd.to_numeric(df_ws.get('Duration (Effort Days)'), errors='coerce').fillna(0)
-        df_r['Likelihood (1-5)']        = pd.to_numeric(df_r.get('Likelihood (1-5)'), errors='coerce').fillna(0)
-        df_r['Impact (1-5)']            = pd.to_numeric(df_r.get('Impact (1-5)'), errors='coerce').fillna(0)
+        # Coerce numeric columns
+        df_ws['Actual % Complete']      = pd.to_numeric(df_ws['Actual % Complete'], errors='coerce').fillna(0)
+        df_ws['Duration (Effort Days)'] = pd.to_numeric(df_ws['Duration (Effort Days)'], errors='coerce').fillna(0)
+        df_r['Likelihood (1-5)']        = pd.to_numeric(df_r['Likelihood (1-5)'], errors='coerce').fillna(0)
+        df_r['Impact (1-5)']            = pd.to_numeric(df_r['Impact (1-5)'], errors='coerce').fillna(0)
 
         # KPIs
         num_tasks  = df_ws.shape[0]
@@ -209,37 +203,37 @@ def refresh_dashboard(n):
         kpi = dbc.Card([
             dbc.CardHeader("KPI Summary"),
             dbc.CardBody(dbc.Row([
-                dbc.Col(html.Div([html.H2(num_tasks), html.P("Tasks This Month")])),
+                dbc.Col(html.Div([html.H2(num_tasks),  html.P("Tasks This Month")])),
                 dbc.Col(html.Div([html.H2(num_risks),  html.P("Open Risks")])),
                 dbc.Col(html.Div([html.H2(num_issues), html.P("Open Issues")]))
             ]))
         ], className="shadow-sm mb-4")
 
         # Progress chart
-        df_ws['Start Date'] = pd.to_datetime(df_ws.get('Start Date'), errors='coerce')
-        df_ws['End Date']   = pd.to_datetime(df_ws.get('End Date'),   errors='coerce')
+        df_ws['Start Date'] = pd.to_datetime(df_ws['Start Date'], errors='coerce')
+        df_ws['End Date']   = pd.to_datetime(df_ws['End Date'],   errors='coerce')
         today = pd.Timestamp.today()
         def calc_planned(r):
             if pd.isna(r['Start Date']) or pd.isna(r['End Date']):
                 return 0
             dur = (r['End Date'] - r['Start Date']).days
             el  = (today - r['Start Date']).days
-            return max(0, min(1, el/dur)) * r['Duration (Effort Days)'] if dur > 0 else 0
+            return max(0, min(1, el/dur)) * r['Duration (Effort Days)'] if dur>0 else 0
         df_ws['Planned'] = df_ws.apply(calc_planned, axis=1)
         df_ws['ActualW'] = df_ws['Actual % Complete'] * df_ws['Duration (Effort Days)']
         summary = df_ws.groupby('Workstream').agg({'Duration (Effort Days)':'sum','Planned':'sum','ActualW':'sum'}).reset_index()
-        summary['Planned%'] = summary['Planned'] / summary['Duration (Effort Days)'] * 100
-        summary['Actual%']  = summary['ActualW'] / summary['Duration (Effort Days)'] * 100
+        summary['Planned%'] = summary['Planned']/summary['Duration (Effort Days)']*100
+        summary['Actual%']  = summary['ActualW']/summary['Duration (Effort Days)']*100
         fig = go.Figure()
-        for _, r in summary.iterrows():
-            fig.add_trace(go.Bar(name='Planned', x=[r['Workstream']], y=[r['Planned%']]))
-            fig.add_trace(go.Bar(name='Actual',  x=[r['Workstream']], y=[r['Actual%']]))
+        for _, row in summary.iterrows():
+            fig.add_trace(go.Bar(name='Planned',x=[row['Workstream']],y=[row['Planned%']]))
+            fig.add_trace(go.Bar(name='Actual', x=[row['Workstream']],y=[row['Actual%']]))
         fig.update_layout(barmode='group', height=300)
 
-        # Tasks and members
+        # Tasks table + team members
         table = dbc.Table.from_dataframe(df_ws[['Task Name','Actual % Complete']], striped=True, bordered=True, hover=True)
-        assigned = df_ws.get('Assigned To', pd.Series()).dropna().str.split(',').explode().str.strip().str.lower()
-        df_refs['lower'] = ensure_str(df_refs.get('Person Name')).str.lower().str.strip()
+        assigned = df_ws['Assigned To'].dropna().str.split(',').explode().str.strip().str.lower()
+        df_refs['lower'] = ensure_str(df_refs['Person Name']).str.lower().str.strip()
         members = [member_card(r['Person Name'], r['Role']) for _, r in df_refs[df_refs['lower'].isin(assigned)].iterrows()]
 
         return kpi, fig, table, members
