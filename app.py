@@ -46,7 +46,7 @@ def risk_dashboard():
     df_risks['Likelihood (1-5)'] = pd.to_numeric(df_risks['Likelihood (1-5)'], errors='coerce')
     df_risks['Impact (1-5)'] = pd.to_numeric(df_risks['Impact (1-5)'], errors='coerce')
     
-    df_risks['Risk Score'] = pd.to_numeric(df_risks['Risk Score'].astype(str).str.strip(), errors='coerce')
+    df_risks['Risk Score'] = pd.to_numeric(df_risks['Risk Score'], errors='coerce')
 
     score_counts = {
         "High": df_risks[(df_risks['Risk Score'] >= 10)].shape[0],
