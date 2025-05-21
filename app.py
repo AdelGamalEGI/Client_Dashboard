@@ -72,7 +72,7 @@ def risk_dashboard():
                     html.Span(f"{score_counts['Low']} risks")
                 ])
             ])
-        ], style={"minHeight": "300px"})
+        ])
     ])
 
     # --- New Risk Matrix ---
@@ -95,7 +95,7 @@ def risk_dashboard():
             else:
                 color = "yellow"
             cell_content = html.Div(", ".join(risk_ids), style={"fontSize": "0.75rem"})
-            row.append(html.Td(cell_content, style={"backgroundColor": color, "border": "1px solid #ccc", "padding": "12px", "minWidth": "90px"}))
+            row.append(html.Td(cell_content, style={"backgroundColor": color, "border": "1px solid #ccc", "width": "80px", "height": "80px", "textAlign": "center", "verticalAlign": "middle", "fontSize": "0.65rem", "whiteSpace": "normal", "wordWrap": "break-word", "overflow": "hidden"}))
         matrix_grid.append(html.Tr(row))
 
     matrix_table = dbc.Card([
