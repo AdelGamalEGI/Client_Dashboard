@@ -45,15 +45,15 @@ def risk_dashboard():
 
     df_risks['Likelihood (1-5)'] = pd.to_numeric(df_risks['Likelihood (1-5)'], errors='coerce')
     df_risks['Impact (1-5)'] = pd.to_numeric(df_risks['Impact (1-5)'], errors='coerce')
-    df_risks['Risk Score'] = pd.to_numeric(df_risks['Risk Score'], errors='coerce')
-    df_risks = df_risks[df_risks['Status'].astype(str).str.lower().str.strip() == 'open']
+    
+    df_risks['Risk Score'] = pd.to_numeric(df_risks['Risk Score'].astype(str).str.strip(), errors='coerce')
 
-    # --- New Summary Block (Top Left) ---
     score_counts = {
-        "High": df_risks[(df_risks['Risk Score'] >= 11)].shape[0],
-        "Medium": df_risks[(df_risks['Risk Score'] >= 6) & (df_risks['Risk Score'] < 11)].shape[0],
-        "Low": df_risks[(df_risks['Risk Score'] >= 1) & (df_risks['Risk Score'] < 6)].shape[0],
+        "High": df_risks[(df_risks['Risk Score'] >= 10)].shape[0],
+        "Medium": df_risks[(df_risks['Risk Score'] >= 5) & (df_risks['Risk Score'] < 10)].shape[0],
+        "Low": df_risks[(df_risks['Risk Score'] >= 1) & (df_risks['Risk Score'] < 5)].shape[0],
     }
+
 
     summary_block = dbc.Card([
         dbc.CardHeader("Open Risks by Severity"),
