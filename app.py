@@ -41,7 +41,10 @@ def risk_dashboard():
     creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
     client = gspread.authorize(creds)
     sheet = client.open("Project_Planning_Workbook")
-    df_risks = get_as_dataframe(sheet.worksheet("Risk_Register")).dropna(how="all")
+    values = sheet.worksheet("Risk_Register").get_all_values()
+    headers = values[0]
+    rows = values[1:]
+    df_risks = pd.DataFrame(rows, columns=headers)
 
     df_risks['Likelihood (1-5)'] = pd.to_numeric(df_risks['Likelihood (1-5)'], errors='coerce')
     df_risks['Impact (1-5)'] = pd.to_numeric(df_risks['Impact (1-5)'], errors='coerce')
