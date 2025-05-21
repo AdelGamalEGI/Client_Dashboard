@@ -1,3 +1,4 @@
+import os
 import dash
 from dash import dcc, html, Input, Output
 import dash_bootstrap_components as dbc
@@ -7,7 +8,11 @@ from mian_dashboard_working import main_dashboard, refresh_dashboard as main_ref
 from risk_dashboard_working import risk_dashboard
 
 # Initialize Dash
-app    = dash.Dash(__name__, suppress_callback_exceptions=True, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app = dash.Dash(
+    __name__,
+    suppress_callback_exceptions=True,
+    external_stylesheets=[dbc.themes.BOOTSTRAP]
+)
 server = app.server
 
 # Home layout
@@ -20,9 +25,10 @@ home_layout = html.Div([
 ])
 
 # App layout
-dcc_location = dcc.Location(id="url", refresh=False)
-page_content = html.Div(id="page-content")
-app.layout = html.Div([dcc_location, page_content])
+app.layout = html.Div([
+    dcc.Location(id="url", refresh=False),
+    html.Div(id="page-content")
+])
 
 # Routing callback
 @app.callback(
@@ -45,6 +51,7 @@ app.callback(
     Input('interval-refresh', 'n_intervals')
 )(main_refresh)
 
-# Run server (Dash v2+)
+# Run server on Render-compatible host & port
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 8050))
+    app.run_server(host="0.0.0.0", port=port, debug=True)
