@@ -46,12 +46,10 @@ def risk_dashboard():
     df_risks['Likelihood (1-5)'] = pd.to_numeric(df_risks['Likelihood (1-5)'], errors='coerce')
     df_risks['Impact (1-5)'] = pd.to_numeric(df_risks['Impact (1-5)'], errors='coerce')
     
-    df_risks['Risk Score'] = pd.to_numeric(df_risks['Risk Score'], errors='coerce')
-
     score_counts = {
-        "High": df_risks[(df_risks['Risk Score'] >= 10)].shape[0],
-        "Medium": df_risks[(df_risks['Risk Score'] >= 5) & (df_risks['Risk Score'] < 10)].shape[0],
-        "Low": df_risks[(df_risks['Risk Score'] >= 1) & (df_risks['Risk Score'] < 5)].shape[0],
+        "High": df_risks[df_risks['Risk Level'].astype(str).str.strip().str.lower() == 'high'].shape[0],
+        "Medium": df_risks[df_risks['Risk Level'].astype(str).str.strip().str.lower() == 'medium'].shape[0],
+        "Low": df_risks[df_risks['Risk Level'].astype(str).str.strip().str.lower() == 'low'].shape[0],
     }
 
 
@@ -106,7 +104,7 @@ def risk_dashboard():
     ])
 
     # --- Risk Table (Bottom) ---
-    table_columns = ["Risk ID", "Risk Description", "Likelihood (1-5)", "Impact (1-5)", "Risk Score", "Status"]
+    table_columns = ["Risk ID", "Risk Description", "Likelihood (1-5)", "Impact (1-5)", "Risk Level", "Status"]
     risk_table = dash_table.DataTable(
         columns=[{"name": i, "id": i} for i in table_columns],
         data=df_risks[table_columns].to_dict('records'),
