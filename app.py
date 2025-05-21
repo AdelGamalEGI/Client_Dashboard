@@ -16,13 +16,29 @@ app = dash.Dash(
 server = app.server
 
 # Home layout
-home_layout = html.Div([
+home_layout = dbc.Container([
     html.H1("Welcome to AIS Portal", className="text-center my-4"),
     dbc.Row([
-        dbc.Col(dcc.Link(dbc.Button("📊 Go to Dashboard", color="primary"), href="/dashboard"), width=6),
-        dbc.Col(dcc.Link(dbc.Button("🛡️ Go to Risk View",    color="danger" ), href="/risks"   ), width=6),
-    ], justify="center", className="my-4"),
-])
+        dbc.Col(
+            dcc.Link(
+                dbc.Button("📊 Dashboard", color="primary", className="btn-lg w-100"),
+                href="/dashboard"
+            ),
+            width=3
+        ),
+        dbc.Col(
+            dcc.Link(
+                dbc.Button("🛡️ Risk View", color="danger", className="btn-lg w-100"),
+                href="/risks"
+            ),
+            width=3
+        ),
+    ], justify="center", className="my-5 g-4"),
+    html.P(
+        "Select an option above to view the AIS Dashboard or Risk View.",
+        className="text-center text-muted"
+    )
+], fluid=True)
 
 # App layout
 app.layout = html.Div([
