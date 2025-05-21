@@ -32,6 +32,17 @@ def risk_dashboard():
 
 
 # Initialize app
+
+# Centralized Google Sheet loading
+scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
+client = gspread.authorize(creds)
+sheet = client.open("Project_Planning_Workbook")
+df_workstreams = pd.DataFrame(sheet.worksheet("Workstreams").get_all_records())
+df_issues = pd.DataFrame(sheet.worksheet("Issue_Tracker").get_all_records())
+df_risks_values = sheet.worksheet("Risk_Register").get_all_values()
+df_risks = pd.DataFrame(df_risks_values[1:], columns=df_risks_values[0])
+df_team = pd.DataFrame(sheet.worksheet("References").get_all_records())
 app = dash.Dash(__name__, suppress_callback_exceptions=True, external_stylesheets=[dbc.themes.BOOTSTRAP])
 server = app.server
 
