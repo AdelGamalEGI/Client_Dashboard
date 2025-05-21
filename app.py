@@ -162,11 +162,20 @@ def main_dashboard():
         dcc.Interval(id='interval-refresh', interval=60*1000, n_intervals=0),
         dbc.Row([
             dbc.Col(html.Div(dbc.Card(id='kpi-summary', className='shadow-sm'), style={"height": "300px", "overflowY": "auto"}), width=6),
-            dbc.Col(dbc.Card([dbc.CardHeader('Workstream Progress'), dbc.CardBody([dcc.Graph(id='workstream-progress-chart')])], className="shadow-sm"), width=6),
+            dbc.Col(dbc.Card([
+                dbc.CardHeader('Workstream Progress'),
+                dbc.CardBody([dcc.Graph(id='workstream-progress-chart')])
+            ], className="shadow-sm"), width=6),
         ], className='mb-4'),
         dbc.Row([
-            dbc.Col(dbc.Card([dbc.CardHeader('Tasks This Month'), dbc.CardBody([html.Div(dbc.Table(id='tasks-table'), style={"maxHeight": "300px"})", "overflowY": "auto"})])], className="shadow-sm"), width=6),
-            dbc.Col(dbc.Card([dbc.CardHeader('Active Team Members'), dbc.CardBody(html.Div(id='team-members', style={"maxHeight": "300px", "overflowY": "auto"}))], className="shadow-sm"), width=6),
+            dbc.Col(dbc.Card([
+                dbc.CardHeader('Tasks This Month'),
+                dbc.CardBody(html.Div(dbc.Table(id='tasks-table'), style={"maxHeight": "300px", "overflowY": "auto"}))
+            ], className="shadow-sm"), width=6),
+            dbc.Col(dbc.Card([
+                dbc.CardHeader('Active Team Members'),
+                dbc.CardBody(html.Div(id='team-members', style={"maxHeight": "300px", "overflowY": "auto"}))
+            ], className="shadow-sm"), width=6),
         ])
     ], fluid=True)
 
