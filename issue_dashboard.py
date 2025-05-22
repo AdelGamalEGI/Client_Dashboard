@@ -19,11 +19,13 @@ def issue_dashboard():
     form = dbc.Card([
         dbc.CardHeader("Submit New Issue"),
         dbc.CardBody([
-            dbc.FormGroup([
+            # Issue Description
+            html.Div([
                 dbc.Label("Issue Description", html_for="issue-desc"),
                 dbc.Textarea(id="issue-desc", placeholder="Describe the issue...", className="mb-3")
-            ]),
-            dbc.FormGroup([
+            ], className="mb-3"),
+            # Severity
+            html.Div([
                 dbc.Label("Severity", html_for="issue-severity"),
                 dcc.Dropdown(
                     id="issue-severity",
@@ -32,14 +34,17 @@ def issue_dashboard():
                         {"label": "Medium", "value": "Medium"},
                         {"label": "Low", "value": "Low"}
                     ],
-                    placeholder="Select severity"
+                    placeholder="Select severity",
+                    className="mb-3"
                 )
-            ]),
-            dbc.FormGroup([
+            ], className="mb-3"),
+            # Reported By
+            html.Div([
                 dbc.Label("Reported By", html_for="issue-reported-by"),
-                dbc.Input(id="issue-reported-by", placeholder="Your name...", type="text")
-            ]),
-            dbc.Button("Submit Issue", id="submit-issue", color="primary", className="mt-2")
+                dbc.Input(id="issue-reported-by", placeholder="Your name...", type="text", className="mb-3")
+            ], className="mb-3"),
+            # Submit button
+            dbc.Button("Submit Issue", id="submit-issue", color="primary")
         ])
     ], className="mb-4 shadow-sm")
 
@@ -91,31 +96,22 @@ def register_issue_callbacks(app: dash.Dash):
             issue_id = f"ISSUE-{next_num:03d}"
             # Date reported
             date_reported = datetime.date.today().isoformat()
-            # Build row in sheet's column order
+            # Build new row in sheet's column order
             new_row = []
             for col in headers:
-                if col == "Issue ID":
-                    new_row.append(issue_id)
-                elif col == "Issue Description":
-                    new_row.append(desc or "")
-                elif col == "Reported By":
-                    new_row.append(reporter or "")
-                elif col == "Date Reported":
-                    new_row.append(date_reported)
-                elif col == "Severity":
-                    new_row.append(sev or "")
-                elif col == "Status":
-                    new_row.append("Open")
-                else:
-                    # leave other columns blank
-                    new_row.append("")
+                if col == "Issue ID": new_row.append(issue_id)
+                elif col == "Issue Description": new_row.append(desc or "")
+                elif col == "Severity": new_row.append(sev or "")
+                elif col == "Reported By": new_row.append(reporter or "")
+                elif col == "Date Reported": new_row.append(date_reported)
+                elif col == "Status": new_row.append("Open")
+                else: new_row.append("")
             ISSUE_WS.append_row(new_row, value_input_option="USER_ENTERED")
             # Reload df after append
             values = ISSUE_WS.get_all_values()
             df = pd.DataFrame(values[1:], columns=values[0])
 
-        # Filter open issues
+        # Filter open issues and return required columns
         df['Status'] = df['Status'].astype(str).str.lower().str.strip()
         df_open = df[df['Status'] == 'open']
-        # Return only required fields
         return df_open[["Issue ID", "Issue Description", "Severity", "Date Reported"]].to_dict('records')
