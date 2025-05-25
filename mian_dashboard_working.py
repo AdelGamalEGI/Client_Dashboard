@@ -82,12 +82,18 @@ def update_dashboard(n):
     df_milestones['End Date'] = pd.to_datetime(df_milestones['End Date'], errors='coerce')
     df_milestones['Overall Progress'] = pd.to_numeric(df_milestones['Overall Progress'], errors='coerce').fillna(0)
 
-    def progress_color(p):
-        if p >= 0.8: return 'green'
-        elif p >= 0.3: return 'orange'
+    today = pd.Timestamp.today()
+
+    def progress_color(row):
+        if row['Start Date'] > today:
+            return 'green'  # Not yet started
+        elif row['Overall Progress'] >= 0.8:
+            return 'green'
+        elif row['Overall Progress'] >= 0.3:
+            return 'orange'
         return 'red'
 
-    df_milestones['Color'] = df_milestones['Overall Progress'].apply(progress_color)
+    df_milestones['Color'] = df_milestones.apply(progress_color, axis=1)
 
     fig = go.Figure()
     for _, row in df_milestones.iterrows():
@@ -106,7 +112,7 @@ def update_dashboard(n):
     fig.update_layout(
         title="Milestone Gantt Chart with Progress Coloring",
         barmode='stack',
-        xaxis_title="Date",
+        xaxis=dict(title="Timeline", tickformat="%b %Y", type='date'),
         yaxis=dict(autorange="reversed", title="Milestone"),
         height=500,
         showlegend=False
