@@ -45,23 +45,23 @@ def member_card(name, role):
         className='mb-2 p-2 shadow-sm'
     )
 
-# Layout
-app.layout = dbc.Container([
-    html.H2("Milestone Dashboard", className="text-center my-4"),
-    dcc.Interval(id='interval-refresh', interval=60*1000, n_intervals=0),
-    dbc.Row([
-        dbc.Col(dcc.Graph(id='milestone-gantt-chart'), width=12)
-    ]),
-    html.Hr(),
-    html.H4("Active Team Members", className="mt-4 mb-3"),
-    dbc.Row(id='active-team-members'),
+def milestone_dashboard_layout():
+    return dbc.Container([
+        html.H2("Milestone Dashboard", className="text-center my-4"),
+        dcc.Interval(id='interval-refresh', interval=60*1000, n_intervals=0),
+        dbc.Row([
+            dbc.Col(dcc.Graph(id='milestone-gantt-chart'), width=12)
+        ]),
+        html.Hr(),
+        html.H4("Active Team Members", className="mt-4 mb-3"),
+        dbc.Row(id='active-team-members'),
 
-    # Modal for Activities
-    dbc.Modal([
-        dbc.ModalHeader(dbc.ModalTitle(id="modal-title")),
-        dbc.ModalBody(dash_table.DataTable(id='activities-table', style_table={"overflowX": "auto"}))
-    ], id="activity-modal", size="xl", is_open=False)
-])
+        # Modal for Activities
+        dbc.Modal([
+            dbc.ModalHeader(dbc.ModalTitle(id="modal-title")),
+            dbc.ModalBody(dash_table.DataTable(id='activities-table', style_table={"overflowX": "auto"}))
+        ], id="activity-modal", size="xl", is_open=False)
+    ])
 
 @app.callback(
     Output('milestone-gantt-chart', 'figure'),
