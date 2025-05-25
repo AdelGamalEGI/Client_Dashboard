@@ -3,18 +3,12 @@ import dash
 from dash import dcc, html, Input, Output
 import dash_bootstrap_components as dbc
 
-# Import your two standalone dashboards
-from mian_dashboard_working import main_dashboard, refresh_dashboard as main_refresh
+# Import full Dash app from your new milestone-based dashboard
+from mian_dashboard_working import app as milestone_app
 from risk_dashboard_working import risk_dashboard
-from issue_dashboard      import issue_dashboard, register_issue_callbacks
+from issue_dashboard import issue_dashboard, register_issue_callbacks
 
-# Initialize Dash
-app    = dash.Dash(
-    __name__,
-    suppress_callback_exceptions=True,
-    external_stylesheets=[dbc.themes.BOOTSTRAP]
-)
-server = app.server
+server = milestone_app.server  # Use the server object from the imported app
 
 # Home layout with navigation buttons
 home_layout = dbc.Container([
@@ -48,20 +42,20 @@ home_layout = dbc.Container([
     )
 ], fluid=True)
 
-# App layout
-app.layout = html.Div([
+# Wrap the imported app layout with routing
+milestone_app.layout = html.Div([
     dcc.Location(id="url", refresh=False),
     html.Div(id="page-content")
 ])
 
-# Page routing callback
-@app.callback(
+# Page routing
+@milestone_app.callback(
     Output("page-content", "children"),
     Input("url", "pathname")
 )
 def display_page(pathname):
     if pathname == "/dashboard":
-        return main_dashboard()
+        return milestone_app.layout  # dashboard layout is already set in the main file
     elif pathname == "/risks":
         return risk_dashboard()
     elif pathname == "/issues":
@@ -69,19 +63,10 @@ def display_page(pathname):
     else:
         return home_layout
 
-# Re-bind the existing refresh callback from the main dashboard
-app.callback(
-    Output('kpi-summary', 'children'),
-    Output('workstream-progress-chart', 'figure'),
-    Output('tasks-table', 'children'),
-    Output('team-members', 'children'),
-    Input('interval-refresh', 'n_intervals')
-)(main_refresh)
+# Register issue tracker callbacks
+register_issue_callbacks(milestone_app)
 
-# Register the issue-tracker callbacks
-register_issue_callbacks(app)
-
-# Run server on Render-compatible host & port
+# Run server
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8050))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    milestone_app.run(host="0.0.0.0", port=port, debug=True)
