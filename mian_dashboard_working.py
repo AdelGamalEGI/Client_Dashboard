@@ -1,11 +1,10 @@
-# Updated version of the dashboard with enhanced readability for milestones
+# Updated version of the dashboard with enhanced milestone coloring logic
 
 import dash
 from dash import dcc, html, Input, Output, State, dash_table
 import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 import gspread
 from gspread_dataframe import get_as_dataframe
 from oauth2client.service_account import ServiceAccountCredentials
@@ -54,14 +53,16 @@ def milestone_dashboard_layout():
             dbc.Col([
                 dcc.Graph(id='milestone-gantt-chart'),
                 html.Div(
-                    "🟩 Not Started • 🟧 In Progress • 🟥 Delayed",
-                    className="text-muted text-center mt-2"
+                    """
+                    ▫️ Not Started • 🟧 In Progress • 🟩 Completed • 🟥 Overdue (no progress past start date)
+                    """, className="text-muted text-center mt-2"
                 )
             ], width=12)
         ]),
         html.Hr(),
         html.H4("Active Team Members", className="mt-4 mb-3"),
         dbc.Row(id='active-team-members'),
+
         # Modal for Activities
         dbc.Modal([
             dbc.ModalHeader(dbc.ModalTitle(id="modal-title")),
@@ -96,17 +97,21 @@ def update_dashboard(n):
     today = pd.Timestamp.today()
 
     def progress_color(row):
-        if row['Start Date'] > today:
-            return 'green'  # Not yet started
-        elif row['Overall Progress'] >= 0.8:
+        # Completed milestones
+        if row['Overall Progress'] >= 1:
             return 'green'
-        elif row['Overall Progress'] >= 0.3:
+        # Overdue with no progress
+        elif (today > row['Start Date']) and row['Overall Progress'] == 0:
+            return 'red'
+        # In progress
+        elif row['Overall Progress'] > 0:
             return 'orange'
-        return 'red'
+        # Not started yet
+        else:
+            return 'lightgray'
 
     df_milestones['Color'] = df_milestones.apply(progress_color, axis=1)
 
-    # Build the full and progress bars and create the figure
     full_bars = []
     progress_bars = []
 
@@ -138,7 +143,12 @@ def update_dashboard(n):
         x_end="End",
         y="Milestone Name",
         color="Color",
-        color_discrete_map={"lightgray": "lightgray", "green": "green", "orange": "orange", "red": "red"},
+        color_discrete_map={
+            "lightgray": "lightgray",
+            "green": "green",
+            "orange": "orange",
+            "red": "red"
+        },
         hover_data={"Milestone ID": True, "Progress": ":.0%"},
         custom_data=["Milestone ID"]
     )
