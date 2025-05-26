@@ -101,36 +101,42 @@ def update_dashboard(n):
 
     df_milestones['Color'] = df_milestones.apply(progress_color, axis=1)
 
-    fig = go.Figure()
-    for _, row in df_milestones.iterrows():
-        duration_days = (row['End Date'] - row['Start Date']).days
-        progress_days = duration_days * row['Overall Progress']
+    full_bars = []
+progress_bars = []
+for _, row in df_milestones.iterrows():
+    full_bars.append({
+        "Milestone Name": row['Milestone Name'],
+        "Start": row['Start Date'],
+        "End": row['End Date'],
+        "Type": "Full",
+        "Color": "lightgray",
+        "Milestone ID": row['Milestone ID'],
+        "Progress": row['Overall Progress']
+    })
 
-        # Background (full duration)
-        fig.add_trace(go.Bar(
-            x=[duration_days],
-            y=[row['Milestone Name']],
-            base=[row['Start Date']],
-            orientation='h',
-            marker=dict(color='lightgray'),
-            hoverinfo='skip',
-            showlegend=False
-        ))
+    progress_duration = row['Start Date'] + (row['End Date'] - row['Start Date']) * row['Overall Progress']
+    progress_bars.append({
+        "Milestone Name": row['Milestone Name'],
+        "Start": row['Start Date'],
+        "End": progress_duration,
+        "Type": "Progress",
+        "Color": row['Color'],
+        "Milestone ID": row['Milestone ID'],
+        "Progress": row['Overall Progress']
+    })
 
-        # Foreground (progress fill)
-        fig.add_trace(go.Bar(
-            x=[progress_days],
-            y=[row['Milestone Name']],
-            base=[row['Start Date']],
-            orientation='h',
-            marker=dict(color=row['Color']),
-            hovertext=f"{row['Milestone ID']}<br>Progress: {row['Overall Progress']*100:.0f}%",
-            customdata=[row['Milestone ID']],
-            hoverinfo='text',
-            showlegend=False
-        ))
-
-    fig.update_yaxes(autorange='reversed')
+combined_df = pd.DataFrame(full_bars + progress_bars)
+fig = px.timeline(
+    combined_df,
+    x_start="Start",
+    x_end="End",
+    y="Milestone Name",
+    color="Color",
+    color_discrete_map={"lightgray": "lightgray", "green": "green", "orange": "orange", "red": "red"},
+    hover_data={"Milestone ID": True, "Progress": ":.0%"},
+    custom_data=["Milestone ID"]
+)
+(autorange='reversed')
     fig.update_layout(
         title="Milestone Gantt Chart with Progress Coloring",
         xaxis_title="Timeline",
