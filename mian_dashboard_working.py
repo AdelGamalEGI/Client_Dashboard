@@ -62,7 +62,6 @@ def milestone_dashboard_layout():
         html.Hr(),
         html.H4("Active Team Members", className="mt-4 mb-3"),
         dbc.Row(id='active-team-members'),
-
         # Modal for Activities
         dbc.Modal([
             dbc.ModalHeader(dbc.ModalTitle(id="modal-title")),
@@ -81,6 +80,7 @@ app.layout = milestone_dashboard_layout()
     Input('interval-refresh', 'n_intervals')
 )
 def update_dashboard(n):
+    # Authenticate and pull data
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
     creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
     client = gspread.authorize(creds)
@@ -90,53 +90,61 @@ def update_dashboard(n):
     df_activities = get_as_dataframe(sheet.worksheet("Activities")).dropna(how='all')
     df_references = get_as_dataframe(sheet.worksheet("References")).dropna(how='all')
 
+    # Preprocess dates and progress
     df_milestones['Start Date'] = pd.to_datetime(df_milestones['Start Date'], errors='coerce')
     df_milestones['End Date'] = pd.to_datetime(df_milestones['End Date'], errors='coerce')
     df_milestones['Overall Progress'] = pd.to_numeric(df_milestones['Overall Progress'], errors='coerce').fillna(0)
 
     today = pd.Timestamp.today()
 
+    # Determine color based on progress and dates
     def progress_color(row):
-        # Completed milestones
         if row['Overall Progress'] >= 1:
-            return 'green'
-        # Overdue with no progress
+            return 'green'   # Completed
         elif (today > row['Start Date']) and row['Overall Progress'] == 0:
-            return 'red'
-        # In progress
+            return 'red'     # Overdue with no progress
         elif row['Overall Progress'] > 0:
-            return 'orange'
-        # Not started yet
+            return 'orange'  # In progress
         else:
-            return 'lightgray'
+            return 'lightgray'  # Not started yet
 
     df_milestones['Color'] = df_milestones.apply(progress_color, axis=1)
 
+    # Build full-duration bars and progress bars
     full_bars = []
     progress_bars = []
 
     for _, row in df_milestones.iterrows():
+        # Full bar: if overdue with no progress, color red; otherwise light gray
+        if row['Overall Progress'] == 0 and today > row['Start Date']:
+            full_color = 'red'
+        else:
+            full_color = 'lightgray'
+
         full_bars.append({
             "Milestone Name": row['Milestone Name'],
             "Start": row['Start Date'],
             "End": row['End Date'],
-            "Color": "lightgray",
+            "Color": full_color,
             "Milestone ID": row['Milestone ID'],
             "Progress": row['Overall Progress']
         })
 
-        progress_end = row['Start Date'] + (row['End Date'] - row['Start Date']) * row['Overall Progress']
-        progress_bars.append({
-            "Milestone Name": row['Milestone Name'],
-            "Start": row['Start Date'],
-            "End": progress_end,
-            "Color": row['Color'],
-            "Milestone ID": row['Milestone ID'],
-            "Progress": row['Overall Progress']
-        })
+        # Only draw a progress bar if there's actual progress
+        if row['Overall Progress'] > 0:
+            progress_end = row['Start Date'] + (row['End Date'] - row['Start Date']) * row['Overall Progress']
+            progress_bars.append({
+                "Milestone Name": row['Milestone Name'],
+                "Start": row['Start Date'],
+                "End": progress_end,
+                "Color": row['Color'],
+                "Milestone ID": row['Milestone ID'],
+                "Progress": row['Overall Progress']
+            })
 
     combined_df = pd.DataFrame(full_bars + progress_bars)
 
+    # Create Gantt chart
     fig = px.timeline(
         combined_df,
         x_start="Start",
@@ -145,8 +153,8 @@ def update_dashboard(n):
         color="Color",
         color_discrete_map={
             "lightgray": "lightgray",
-            "green": "green",
             "orange": "orange",
+            "green": "green",
             "red": "red"
         },
         hover_data={"Milestone ID": True, "Progress": ":.0%"},
@@ -161,6 +169,7 @@ def update_dashboard(n):
         height=500,
         showlegend=False
     )
+    # Add 'Today' line
     fig.add_shape(
         type="line",
         x0=today, x1=today, y0=0, y1=1,
@@ -175,6 +184,7 @@ def update_dashboard(n):
         font=dict(size=12, color="black")
     )
 
+    # Active team members
     df_activities['Progress'] = pd.to_numeric(df_activities['Progress'], errors='coerce').fillna(0)
     active = df_activities[df_activities['Progress'] < 1]
     assigned_people = (
