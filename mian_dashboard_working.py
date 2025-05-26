@@ -122,7 +122,25 @@ def update_dashboard(n):
         showlegend=False
     )
 
-    fig.add_vline(x=today.strftime('%Y-%m-%d'), line_dash="dot", line_color="black", annotation_text="Today", annotation_position="top")
+    fig.add_shape(
+        type="line",
+        x0=today,
+        x1=today,
+        y0=0,
+        y1=1,
+        xref="x",
+        yref="paper",
+        line=dict(dash="dot", color="black")
+    )
+    fig.add_annotation(
+        x=today,
+        y=1.02,
+        text="Today",
+        showarrow=False,
+        xref="x",
+        yref="paper",
+        font=dict(size=12, color="black")
+    )
 
     df_activities['Progress'] = pd.to_numeric(df_activities['Progress'], errors='coerce').fillna(0)
     active = df_activities[df_activities['Progress'] < 1]
