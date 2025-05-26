@@ -1,10 +1,11 @@
-# Updated version of the dashboard with Gantt chart and team display based on milestones and activities
+# Updated version of the dashboard with enhanced readability for milestones
 
 import dash
 from dash import dcc, html, Input, Output, State, dash_table
 import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import gspread
 from gspread_dataframe import get_as_dataframe
 from oauth2client.service_account import ServiceAccountCredentials
@@ -50,7 +51,12 @@ def milestone_dashboard_layout():
         html.H2("Milestone Dashboard", className="text-center my-4"),
         dcc.Interval(id='interval-refresh', interval=60*1000, n_intervals=0),
         dbc.Row([
-            dbc.Col(dcc.Graph(id='milestone-gantt-chart'), width=12)
+            dbc.Col([
+                dcc.Graph(id='milestone-gantt-chart'),
+                html.Div("""
+                    🟩 Not Started • 🟧 In Progress • 🟥 Delayed
+                """, className="text-muted text-center mt-2")
+            ], width=12)
         ]),
         html.Hr(),
         html.H4("Active Team Members", className="mt-4 mb-3"),
@@ -102,7 +108,8 @@ def update_dashboard(n):
         y="Milestone Name",
         color="Color",
         color_discrete_map={"green": "green", "orange": "orange", "red": "red"},
-        custom_data=["Milestone ID", "Overall Progress"]
+        custom_data=["Milestone ID", "Overall Progress"],
+        hover_name="Milestone Name"
     )
 
     fig.update_yaxes(autorange="reversed")
@@ -110,9 +117,12 @@ def update_dashboard(n):
         title="Milestone Gantt Chart with Progress Coloring",
         xaxis_title="Timeline",
         xaxis_tickformat="%b %Y",
+        xaxis=dict(showgrid=True),
         height=500,
         showlegend=False
     )
+
+    fig.add_vline(x=today, line_dash="dot", line_color="black", annotation_text="Today", annotation_position="top")
 
     df_activities['Progress'] = pd.to_numeric(df_activities['Progress'], errors='coerce').fillna(0)
     active = df_activities[df_activities['Progress'] < 1]
