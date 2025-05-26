@@ -1,4 +1,4 @@
-# Updated version of the dashboard with fixed category ordering
+# Updated version of the dashboard with fixed category ordering (no y-axis reversal)
 
 import dash
 from dash import dcc, html, Input, Output, State, dash_table
@@ -140,14 +140,15 @@ def update_dashboard(n):
 
     combined_df = pd.DataFrame(full_bars + progress_bars)
 
-    # Create Gantt chart with explicit category ordering
+    # Create Gantt chart with explicit (reversed) category ordering
+    ordered_names = df_milestones['Milestone Name'][::-1].tolist()
     fig = px.timeline(
         combined_df,
         x_start="Start",
         x_end="End",
         y="Milestone Name",
         color="Color",
-        category_orders={"Milestone Name": df_milestones["Milestone Name"].tolist()},
+        category_orders={"Milestone Name": ordered_names},
         color_discrete_map={
             "lightgray": "lightgray",
             "orange": "orange",
@@ -157,8 +158,7 @@ def update_dashboard(n):
         hover_data={"Milestone ID": True, "Progress": ":.0%"},
         custom_data=["Milestone ID"]
     )
-    # Reverse y-axis so first sheet row is at the top
-    fig.update_yaxes(autorange='reversed')
+    # No autorange reversal needed
     fig.update_layout(
         title="Milestone Gantt Chart with Progress Coloring",
         xaxis_title="Timeline",
