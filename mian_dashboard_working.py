@@ -53,21 +53,26 @@ def milestone_dashboard_layout():
         dbc.Row([
             dbc.Col([
                 dcc.Graph(id='milestone-gantt-chart'),
-                html.Div("""
-                    🟩 Not Started • 🟧 In Progress • 🟥 Delayed
-                """, className="text-muted text-center mt-2")
+                html.Div(
+                    "🟩 Not Started • 🟧 In Progress • 🟥 Delayed",
+                    className="text-muted text-center mt-2"
+                )
             ], width=12)
         ]),
         html.Hr(),
         html.H4("Active Team Members", className="mt-4 mb-3"),
         dbc.Row(id='active-team-members'),
-
         # Modal for Activities
         dbc.Modal([
             dbc.ModalHeader(dbc.ModalTitle(id="modal-title")),
-            dbc.ModalBody(dash_table.DataTable(id='activities-table', style_table={"overflowX": "auto"}))
+            dbc.ModalBody(
+                dash_table.DataTable(id='activities-table', style_table={"overflowX": "auto"})
+            )
         ], id="activity-modal", size="xl", is_open=False)
     ])
+
+# Set layout
+app.layout = milestone_dashboard_layout()
 
 @app.callback(
     Output('milestone-gantt-chart', 'figure'),
@@ -101,43 +106,44 @@ def update_dashboard(n):
 
     df_milestones['Color'] = df_milestones.apply(progress_color, axis=1)
 
-        full_bars = []
+    # Build the full and progress bars and create the figure
+    full_bars = []
     progress_bars = []
+
     for _, row in df_milestones.iterrows():
         full_bars.append({
             "Milestone Name": row['Milestone Name'],
             "Start": row['Start Date'],
             "End": row['End Date'],
-            "Type": "Full",
             "Color": "lightgray",
             "Milestone ID": row['Milestone ID'],
             "Progress": row['Overall Progress']
         })
 
-        progress_duration = row['Start Date'] + (row['End Date'] - row['Start Date']) * row['Overall Progress']
+        progress_end = row['Start Date'] + (row['End Date'] - row['Start Date']) * row['Overall Progress']
         progress_bars.append({
             "Milestone Name": row['Milestone Name'],
             "Start": row['Start Date'],
-            "End": progress_duration,
-            "Type": "Progress",
+            "End": progress_end,
             "Color": row['Color'],
             "Milestone ID": row['Milestone ID'],
             "Progress": row['Overall Progress']
         })
 
     combined_df = pd.DataFrame(full_bars + progress_bars)
-(
-    combined_df,
-    x_start="Start",
-    x_end="End",
-    y="Milestone Name",
-    color="Color",
-    color_discrete_map={"lightgray": "lightgray", "green": "green", "orange": "orange", "red": "red"},
-    hover_data={"Milestone ID": True, "Progress": ":.0%"},
-    custom_data=["Milestone ID"]
-)
-fig.update_yaxes(autorange='reversed')
-        fig.update_layout(
+
+    fig = px.timeline(
+        combined_df,
+        x_start="Start",
+        x_end="End",
+        y="Milestone Name",
+        color="Color",
+        color_discrete_map={"lightgray": "lightgray", "green": "green", "orange": "orange", "red": "red"},
+        hover_data={"Milestone ID": True, "Progress": ":.0%"},
+        custom_data=["Milestone ID"]
+    )
+    fig.update_yaxes(autorange='reversed')
+    fig.update_layout(
         title="Milestone Gantt Chart with Progress Coloring",
         xaxis_title="Timeline",
         xaxis_tickformat="%b %Y",
@@ -145,30 +151,31 @@ fig.update_yaxes(autorange='reversed')
         height=500,
         showlegend=False
     )
-
-        fig.add_shape(
+    fig.add_shape(
         type="line",
-        x0=today,
-        x1=today,
-        y0=0,
-        y1=1,
-        xref="x",
-        yref="paper",
+        x0=today, x1=today, y0=0, y1=1,
+        xref="x", yref="paper",
         line=dict(dash="dot", color="black")
     )
-        fig.add_annotation(
-        x=today,
-        y=1.02,
+    fig.add_annotation(
+        x=today, y=1.02,
         text="Today",
         showarrow=False,
-        xref="x",
-        yref="paper",
+        xref="x", yref="paper",
         font=dict(size=12, color="black")
     )
 
     df_activities['Progress'] = pd.to_numeric(df_activities['Progress'], errors='coerce').fillna(0)
     active = df_activities[df_activities['Progress'] < 1]
-    assigned_people = active['Assigned To'].dropna().astype(str).str.split(',').explode().str.strip().str.lower()
+    assigned_people = (
+        active['Assigned To']
+        .dropna()
+        .astype(str)
+        .str.split(',')
+        .explode()
+        .str.strip()
+        .str.lower()
+    )
     df_references['Person Name Lower'] = df_references['Person Name'].astype(str).str.lower()
     active_members = df_references[df_references['Person Name Lower'].isin(assigned_people.unique())]
     cards = [member_card(row['Person Name'], row['Role']) for _, row in active_members.iterrows()]
