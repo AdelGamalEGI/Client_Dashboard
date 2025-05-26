@@ -136,7 +136,7 @@ fig = px.timeline(
     hover_data={"Milestone ID": True, "Progress": ":.0%"},
     custom_data=["Milestone ID"]
 )
-(autorange='reversed')
+fig.update_yaxes(autorange='reversed')
     fig.update_layout(
         title="Milestone Gantt Chart with Progress Coloring",
         xaxis_title="Timeline",
