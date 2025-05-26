@@ -1,4 +1,4 @@
-# Updated version of the dashboard with enhanced milestone coloring logic
+# Updated version of the dashboard with fixed category ordering
 
 import dash
 from dash import dcc, html, Input, Output, State, dash_table
@@ -115,12 +115,8 @@ def update_dashboard(n):
     progress_bars = []
 
     for _, row in df_milestones.iterrows():
-        # Full bar: if overdue with no progress, color red; otherwise light gray
-        if row['Overall Progress'] == 0 and today > row['Start Date']:
-            full_color = 'red'
-        else:
-            full_color = 'lightgray'
-
+        # Full bar: overdue milestone colored red, else light gray
+        full_color = 'red' if (row['Overall Progress'] == 0 and today > row['Start Date']) else 'lightgray'
         full_bars.append({
             "Milestone Name": row['Milestone Name'],
             "Start": row['Start Date'],
@@ -130,7 +126,7 @@ def update_dashboard(n):
             "Progress": row['Overall Progress']
         })
 
-        # Only draw a progress bar if there's actual progress
+        # Progress bar overlay
         if row['Overall Progress'] > 0:
             progress_end = row['Start Date'] + (row['End Date'] - row['Start Date']) * row['Overall Progress']
             progress_bars.append({
@@ -144,13 +140,14 @@ def update_dashboard(n):
 
     combined_df = pd.DataFrame(full_bars + progress_bars)
 
-    # Create Gantt chart
+    # Create Gantt chart with explicit category ordering
     fig = px.timeline(
         combined_df,
         x_start="Start",
         x_end="End",
         y="Milestone Name",
         color="Color",
+        category_orders={"Milestone Name": df_milestones["Milestone Name"].tolist()},
         color_discrete_map={
             "lightgray": "lightgray",
             "orange": "orange",
@@ -160,6 +157,7 @@ def update_dashboard(n):
         hover_data={"Milestone ID": True, "Progress": ":.0%"},
         custom_data=["Milestone ID"]
     )
+    # Reverse y-axis so first sheet row is at the top
     fig.update_yaxes(autorange='reversed')
     fig.update_layout(
         title="Milestone Gantt Chart with Progress Coloring",
