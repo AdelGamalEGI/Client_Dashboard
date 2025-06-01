@@ -50,12 +50,17 @@ def milestone_dashboard_layout():
         html.H2("Milestone Dashboard", className="text-center my-4"),
         dcc.Interval(id='interval-refresh', interval=60*1000, n_intervals=0),
         dbc.Row([
-            dbc.Col(dcc.Graph(id='milestone-gantt-chart'), width=12)
+            dbc.Col([
+                dcc.Graph(id='milestone-gantt-chart'),
+                html.Div(
+                    "▫️ Not Started • 🟧 In Progress • 🟩 Completed • 🟥 Overdue", 
+                    className="text-muted text-center mt-2"
+                )
+            ], width=12)
         ]),
         html.Hr(),
         html.H4("Active Team Members", className="mt-4 mb-3"),
         dbc.Row(id='active-team-members'),
-
         # Modal for Activities
         dbc.Modal([
             dbc.ModalHeader(dbc.ModalTitle(id="modal-title")),
@@ -78,42 +83,51 @@ def update_dashboard(n):
     df_activities = get_as_dataframe(sheet.worksheet("Activities")).dropna(how='all')
     df_references = get_as_dataframe(sheet.worksheet("References")).dropna(how='all')
 
+    # Convert dates and progress
     df_milestones['Start Date'] = pd.to_datetime(df_milestones['Start Date'], errors='coerce')
     df_milestones['End Date'] = pd.to_datetime(df_milestones['End Date'], errors='coerce')
     df_milestones['Overall Progress'] = pd.to_numeric(df_milestones['Overall Progress'], errors='coerce').fillna(0)
-
     today = pd.Timestamp.today()
 
-    def progress_color(row):
-        if row['Start Date'] > today:
-            return 'green'  # Not yet started
-        elif row['Overall Progress'] >= 0.8:
-            return 'green'
-        elif row['Overall Progress'] >= 0.3:
-            return 'orange'
-        return 'red'
+    # Determine status and color based on progress and dates
+    def milestone_status(row):
+        if row['Overall Progress'] >= 1:
+            return 'Completed'
+        if (today > row['Start Date']) and row['Overall Progress'] == 0:
+            return 'Overdue'
+        if row['Overall Progress'] > 0:
+            return 'In Progress'
+        return 'Not Started'
 
-    df_milestones['Color'] = df_milestones.apply(progress_color, axis=1)
+    df_milestones['Status'] = df_milestones.apply(milestone_status, axis=1)
+    color_map = {
+        'Not Started': 'lightgray',
+        'In Progress': 'orange',
+        'Completed': 'green',
+        'Overdue': 'red'
+    }
 
+    # Create Gantt chart with status-based coloring
     fig = px.timeline(
         df_milestones,
         x_start="Start Date",
         x_end="End Date",
         y="Milestone Name",
-        color="Color",
-        color_discrete_map={"green": "green", "orange": "orange", "red": "red"},
+        color="Status",
+        color_discrete_map=color_map,
         custom_data=["Milestone ID", "Overall Progress"]
     )
-
     fig.update_yaxes(autorange="reversed")
     fig.update_layout(
         title="Milestone Gantt Chart with Progress Coloring",
         xaxis_title="Timeline",
         xaxis_tickformat="%b %Y",
         height=500,
-        showlegend=False
+        showlegend=True,
+        legend_title_text='Milestone Status'
     )
 
+    # Active team members logic
     df_activities['Progress'] = pd.to_numeric(df_activities['Progress'], errors='coerce').fillna(0)
     active = df_activities[df_activities['Progress'] < 1]
     assigned_people = active['Assigned To'].dropna().astype(str).str.split(',').explode().str.strip().str.lower()
@@ -138,7 +152,7 @@ def show_activities(clickData, is_open):
         creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
         client = gspread.authorize(creds)
         df = get_as_dataframe(client.open("Project_Planning_Workbook").worksheet("Activities")).dropna(how='all')
-        df = df[df['Mielstone ID'] == milestone_id]  # note typo in column name
+        df = df[df['Mielstone ID'] == milestone_id]
         data = df.to_dict('records')
         columns = [{"name": i, "id": i} for i in df.columns]
         return True, f"Activities for {milestone_id}", data, columns
