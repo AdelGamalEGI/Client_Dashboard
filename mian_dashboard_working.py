@@ -1,4 +1,4 @@
-# Updated version of the dashboard with Gantt chart and team display based on milestones and activities
+# Updated version of mian_dashboard_working.py with two-layer Gantt bars and status legend
 
 import dash
 from dash import dcc, html, Input, Output, State, dash_table
@@ -66,7 +66,18 @@ def milestone_dashboard_layout():
             dbc.ModalHeader(dbc.ModalTitle(id="modal-title")),
             dbc.ModalBody(dash_table.DataTable(id='activities-table', style_table={"overflowX": "auto"}))
         ], id="activity-modal", size="xl", is_open=False)
-    ])
+    ], fluid=True)
+
+# Helper to read data from Google Sheets
+def fetch_data():
+    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+    creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
+    client = gspread.authorize(creds)
+    book = client.open("Project_Planning_Workbook")
+    df_m = get_as_dataframe(book.worksheet("Milestones")).dropna(how='all')
+    df_a = get_as_dataframe(book.worksheet("Activities")).dropna(how='all')
+    df_r = get_as_dataframe(book.worksheet("References")).dropna(how='all')
+    return df_m, df_a, df_r
 
 @app.callback(
     Output('milestone-gantt-chart', 'figure'),
@@ -74,63 +85,115 @@ def milestone_dashboard_layout():
     Input('interval-refresh', 'n_intervals')
 )
 def update_dashboard(n):
-    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
-    client = gspread.authorize(creds)
-    sheet = client.open("Project_Planning_Workbook")
+    # Load data
+    df_milestones, df_activities, df_references = fetch_data()
 
-    df_milestones = get_as_dataframe(sheet.worksheet("Milestones")).dropna(how='all')
-    df_activities = get_as_dataframe(sheet.worksheet("Activities")).dropna(how='all')
-    df_references = get_as_dataframe(sheet.worksheet("References")).dropna(how='all')
-
-    # Convert dates and progress
+    # Preprocess milestone dates and progress
     df_milestones['Start Date'] = pd.to_datetime(df_milestones['Start Date'], errors='coerce')
-    df_milestones['End Date'] = pd.to_datetime(df_milestones['End Date'], errors='coerce')
-    df_milestones['Overall Progress'] = pd.to_numeric(df_milestones['Overall Progress'], errors='coerce').fillna(0)
+    df_milestones['End Date']   = pd.to_datetime(df_milestones['End Date'], errors='coerce')
+    df_milestones['Overall Progress'] = (
+        pd.to_numeric(df_milestones['Overall Progress'], errors='coerce').fillna(0)
+    )
     today = pd.Timestamp.today()
 
-    # Determine status and color based on progress and dates
-    def milestone_status(row):
-        if row['Overall Progress'] >= 1:
-            return 'Completed'
-        if (today > row['Start Date']) and row['Overall Progress'] == 0:
-            return 'Overdue'
-        if row['Overall Progress'] > 0:
-            return 'In Progress'
-        return 'Not Started'
+    # Build bars: background and overlay
+    bars = []
+    for _, r in df_milestones.iterrows():
+        start = r['Start Date']
+        end = r['End Date']
+        prog = r['Overall Progress']
+        mid = r['Milestone ID']
+        name = r['Milestone Name']
 
-    df_milestones['Status'] = df_milestones.apply(milestone_status, axis=1)
+        # Base bar: always lightgray
+        bars.append({
+            'Milestone Name': name,
+            'Start': start,
+            'End': end,
+            'Category': 'Background',
+            'Milestone ID': mid,
+            'Progress': prog
+        })
+
+        # Determine overlay end date
+        overlay_end = min(today, end)
+        if overlay_end > start:
+            # Determine status for overlay color
+            if today < end:
+                # Before end date
+                if prog > 0:
+                    status = 'In Progress'
+                else:
+                    status = 'Not Started'
+            else:
+                # On or after end date
+                if prog < 1:
+                    status = 'Overdue'
+                else:
+                    status = 'Completed'
+
+            bars.append({
+                'Milestone Name': name,
+                'Start': start,
+                'End': overlay_end,
+                'Category': status,
+                'Milestone ID': mid,
+                'Progress': prog
+            })
+
+    df_combined = pd.DataFrame(bars)
+
+    # Color mapping for categories
     color_map = {
+        'Background': 'lightgray',
         'Not Started': 'lightgray',
         'In Progress': 'orange',
-        'Completed': 'green',
-        'Overdue': 'red'
+        'Overdue': 'red',
+        'Completed': 'green'
     }
 
-    # Create Gantt chart with status-based coloring
+    # Create Gantt chart
     fig = px.timeline(
-        df_milestones,
-        x_start="Start Date",
-        x_end="End Date",
-        y="Milestone Name",
-        color="Status",
+        df_combined,
+        x_start='Start', x_end='End',
+        y='Milestone Name', color='Category',
         color_discrete_map=color_map,
-        custom_data=["Milestone ID", "Overall Progress"]
+        hover_data={'Milestone ID': True, 'Progress': ':.0%'},
+        custom_data=['Milestone ID']
     )
-    fig.update_yaxes(autorange="reversed")
+    # Hide background category from legend
+    for trace in fig.data:
+        if trace.name == 'Background':
+            trace.showlegend = False
+
+    fig.update_yaxes(autorange='reversed')
     fig.update_layout(
-        title="Milestone Gantt Chart with Progress Coloring",
-        xaxis_title="Timeline",
-        xaxis_tickformat="%b %Y",
-        height=500,
-        showlegend=True,
-        legend_title_text='Milestone Status'
+        title='Milestone Gantt Chart with Progress Coloring',
+        xaxis_title='Timeline', xaxis_tickformat='%b %Y',
+        height=500, showlegend=True, legend_title_text='Milestone Status'
+    )
+    # Add "Today" line
+    fig.add_shape(
+        type='line', x0=today, x1=today, y0=0, y1=1,
+        xref='x', yref='paper', line=dict(dash='dot', color='black')
+    )
+    fig.add_annotation(
+        x=today, y=1.02, text='Today', showarrow=False,
+        xref='x', yref='paper'
     )
 
-    # Active team members logic
+    # Determine active team members
     df_activities['Progress'] = pd.to_numeric(df_activities['Progress'], errors='coerce').fillna(0)
     active = df_activities[df_activities['Progress'] < 1]
-    assigned_people = active['Assigned To'].dropna().astype(str).str.split(',').explode().str.strip().str.lower()
+    assigned_people = (
+        active['Assigned To']
+        .dropna()
+        .astype(str)
+        .str.split(',')
+        .explode()
+        .str.strip()
+        .str.lower()
+    )
     df_references['Person Name Lower'] = df_references['Person Name'].astype(str).str.lower()
     active_members = df_references[df_references['Person Name Lower'].isin(assigned_people.unique())]
     cards = [member_card(row['Person Name'], row['Role']) for _, row in active_members.iterrows()]
@@ -138,21 +201,18 @@ def update_dashboard(n):
     return fig, cards
 
 @app.callback(
-    Output("activity-modal", "is_open"),
-    Output("modal-title", "children"),
-    Output("activities-table", "data"),
-    Output("activities-table", "columns"),
-    Input("milestone-gantt-chart", "clickData"),
-    State("activity-modal", "is_open")
+    Output('activity-modal', 'is_open'),
+    Output('modal-title', 'children'),
+    Output('activities-table', 'data'),
+    Output('activities-table', 'columns'),
+    Input('milestone-gantt-chart', 'clickData'),
+    State('activity-modal', 'is_open')
 )
 def show_activities(clickData, is_open):
     if clickData:
         milestone_id = clickData['points'][0]['customdata'][0]
-        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
-        client = gspread.authorize(creds)
-        df = get_as_dataframe(client.open("Project_Planning_Workbook").worksheet("Activities")).dropna(how='all')
-        df = df[df['Mielstone ID'] == milestone_id]
+        _, df_activities, _ = fetch_data()
+        df = df_activities[df_activities['Mielstone ID'] == milestone_id]
         data = df.to_dict('records')
         columns = [{"name": i, "id": i} for i in df.columns]
         return True, f"Activities for {milestone_id}", data, columns
