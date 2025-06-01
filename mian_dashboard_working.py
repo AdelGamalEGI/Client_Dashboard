@@ -4,7 +4,7 @@ import dash
 from dash import dcc, html, Input, Output, State, dash_table
 import dash_bootstrap_components as dbc
 import pandas as pd
-import plotly.graph_objects as go
+import plotly.express as px
 import gspread
 from gspread_dataframe import get_as_dataframe
 from oauth2client.service_account import ServiceAccountCredentials
@@ -95,25 +95,21 @@ def update_dashboard(n):
 
     df_milestones['Color'] = df_milestones.apply(progress_color, axis=1)
 
-    fig = go.Figure()
-    for _, row in df_milestones.iterrows():
-        fig.add_trace(go.Bar(
-            x=[(row['End Date'] - row['Start Date']).days],
-            y=[row['Milestone Name']],
-            base=[row['Start Date']],
-            orientation='h',
-            marker=dict(color=row['Color']),
-            hovertext=f"{row['Milestone ID']}<br>Progress: {row['Overall Progress']*100:.0f}%",
-            customdata=[row['Milestone ID']],
-            name=row['Milestone Name'],
-            hoverinfo='text'
-        ))
+    fig = px.timeline(
+        df_milestones,
+        x_start="Start Date",
+        x_end="End Date",
+        y="Milestone Name",
+        color="Color",
+        color_discrete_map={"green": "green", "orange": "orange", "red": "red"},
+        custom_data=["Milestone ID", "Overall Progress"]
+    )
 
+    fig.update_yaxes(autorange="reversed")
     fig.update_layout(
         title="Milestone Gantt Chart with Progress Coloring",
-        barmode='stack',
-        xaxis=dict(title="Timeline", tickformat="%b %Y", type='date'),
-        yaxis=dict(autorange="reversed", title="Milestone"),
+        xaxis_title="Timeline",
+        xaxis_tickformat="%b %Y",
         height=500,
         showlegend=False
     )
@@ -137,7 +133,7 @@ def update_dashboard(n):
 )
 def show_activities(clickData, is_open):
     if clickData:
-        milestone_id = clickData['points'][0]['customdata']
+        milestone_id = clickData['points'][0]['customdata'][0]
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
         creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
         client = gspread.authorize(creds)
